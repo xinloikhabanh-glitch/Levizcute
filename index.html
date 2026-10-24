@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>License Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f1115; color: #e6e8ee; }
+  main { max-width: 1150px; margin: 0 auto; padding: 14px; }
+  h1 { font-size: 20px; margin: 6px 0 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .card { background: #171a21; border: 1px solid #262b36; border-radius: 10px; padding: 14px; margin: 12px 0; }
+  input, select, button, textarea { font: inherit; color: inherit; background: #0f1218; border: 1px solid #2c3340; border-radius: 6px; padding: 7px 9px; }
+  input[type=checkbox] { width: 16px; height: 16px; padding: 0; accent-color: #2b5cff; }
+  input:disabled { opacity: .5; }
+  button { cursor: pointer; background: #2b5cff; border-color: #2b5cff; color: #fff; }
+  button.ghost { background: transparent; color: #e6e8ee; border-color: #2c3340; }
+  button.danger { background: #c43a3a; border-color: #c43a3a; }
+  button.sm { padding: 3px 8px; font-size: 12px; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #9aa3b5; }
+  label.row { flex-direction: row; align-items: center; gap: 8px; color: #e6e8ee; font-size: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .bar .grow { flex: 1; min-width: 140px; }
+  .err { color: #ff7b7b; margin: 8px 0 0; }
+  .muted { color: #8892a6; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .link { cursor: pointer; color: #8fb0ff; }
+  textarea { width: 100%; min-height: 110px; resize: vertical; }
+  .wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 860px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid #222733; vertical-align: top; }
+  th { color: #8892a6; font-weight: 600; font-size: 12px; }
+  .badge { padding: 2px 8px; border-radius: 99px; font-size: 12px; white-space: nowrap; }
+  .b-active { background: #12351f; color: #6fe39b; }
+  .b-unused { background: #1d2a44; color: #8fb0ff; }
+  .b-expired { background: #3b2e12; color: #f0c15a; }
+  .b-banned { background: #3d1717; color: #ff8d8d; }
+  .b-premium { background: #35214d; color: #d3a6ff; }
+  .b-basic { background: #22303a; color: #a9c7dd; }
+  .actions { display: flex; flex-wrap: wrap; gap: 4px; }
+  .detail td { background: #12151b; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222733; border: 1px solid #36405a; padding: 9px 14px; border-radius: 8px; max-width: 90vw; z-index: 9; }
+  #toast.bad { background: #3d1717; border-color: #6b2a2a; }
+</style>
+</head>
+<body>
+<main>
+  <h1>License Key Admin <button class="ghost sm" id="btnLogout" hidden>Đăng xuất</button></h1>
+
+  <section class="card" id="login">
+    <h2>Đăng nhập</h2>
+    <div class="bar">
+      <input class="grow" type="password" id="secret" placeholder="ADMIN_SECRET" autocomplete="off">
+      <button id="btnLogin">Vào</button>
+    </div>
+    <p class="err" id="loginErr"></p>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card">
+      <h2>Tạo key</h2>
+      <div class="grid">
+        <label>Gói
+          <select id="tier"><option value="basic">Basic</option><option value="premium">Premium</option></select>
+        </label>
+        <label>Thời hạn
+          <select id="duration">
+            <option value="hour">Giờ</option>
+            <option value="day" selected>Ngày</option>
+            <option value="week">Tuần</option>
+            <option value="month">Tháng (30 ngày)</option>
+            <option value="year">Năm (365 ngày)</option>
+            <option value="lifetime">Vĩnh viễn</option>
+          </select>
+        </label>
+        <label>Số lượng đơn vị (vd 3 ngày)
+          <input type="number" id="quantity" min="1" max="10000" value="1">
+        </label>
+        <label>Số key cần tạo
+          <input type="number" id="count" min="1" max="1000" value="1">
+        </label>
+        <label>Số thiết bị / key
+          <input type="number" id="maxDevices" min="1" max="100" value="1">
+        </label>
+        <label>Prefix (tuỳ chọn)
+          <input type="text" id="prefix" maxlength="10" placeholder="PREM / BASIC">
+        </label>
+        <label>Ghi chú
+          <input type="text" id="note" maxlength="200" placeholder="vd: khách A">
+        </label>
+        <label class="row"><input type="checkbox" id="deviceLock" checked> Khoá thiết bị (HWID)</label>
+        <button id="btnCreate">Tạo key</button>
+      </div>
+      <div id="createOut" hidden style="margin-top:12px">
+        <textarea id="createText" readonly></textarea>
+        <div class="bar" style="margin-top:8px">
+          <button class="ghost sm" id="btnCopy">Copy</button>
+          <button class="ghost sm" id="btnDownload">Tải .txt</button>
+          <span class="muted" id="createInfo"></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Danh sách key <span class="muted" id="summary"></span></h2>
+      <div class="bar">
+        <select id="fTier"><option value="">Mọi gói</option><option value="basic">Basic</option><option value="premium">Premium</option></select>
+        <select id="fState">
+          <option value="">Mọi trạng thái</option>
+          <option value="unused">Chưa dùng</option>
+          <option value="active">Đang dùng</option>
+          <option value="expired">Hết hạn</option>
+          <option value="banned">Bị khoá</option>
+        </select>
+        <input class="grow" type="search" id="fSearch" placeholder="Tìm key / ghi chú">
+        <select id="limit"><option>200</option><option>500</option><option>1000</option></select>
+        <button class="ghost" id="btnReload">Tải lại</button>
+      </div>
+      <div class="bar" id="bulk" hidden>
+        <span id="bulkInfo"></span>
+        <button class="sm" id="bulkBan">Khoá</button>
+        <button class="sm ghost" id="bulkUnban">Mở khoá</button>
+        <button class="sm danger" id="bulkDel">Xoá</button>
+      </div>
+      <div class="wrap">
+        <table>
+          <thead><tr>
+            <th><input type="checkbox" id="selAll"></th>
+            <th>Key</th><th>Gói</th><th>Thời hạn</th><th>Trạng thái</th><th>Hết hạn</th><th>Thiết bị</th><th>Ghi chú</th><th></th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</main>
+<div id="toast" hidden></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+  const UNIT_VI = { hour: 'giờ', day: 'ngày', week: 'tuần', month: 'tháng', year: 'năm' };
+  const STATE_VI = { active: 'Đang dùng', unused: 'Chưa dùng', expired: 'Hết hạn', banned: 'Bị khoá' };
+
+  let secret = '';
+  try { secret = sessionStorage.getItem('adm') || ''; } catch (e) { /* ignore */ }
+  let rows = [];
+  const selected = new Set();
+  let openKey = null;
+  let toastTimer = null;
+
+  // Tạo DOM bằng textContent (không dùng innerHTML) => không bị XSS từ ghi chú/tên thiết bị
+  function h(tag, attrs, ...kids) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs || {})) {
+      if (k === 'class') e.className = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (v !== false && v != null) e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) {
+      if (kid == null || kid === false) continue;
+      e.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    }
+    return e;
+  }
+
+  function toast(msg, bad) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.className = bad ? 'bad' : '';
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
+  }
+
+  async function api(action, body) {
+    const r = await fetch('/api/admin/' + action, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-admin-secret': secret },
+      body: JSON.stringify(body || {}),
+    });
+    let j;
+    try { j = await r.json(); } catch (e) { j = { success: false, message: 'Phản hồi không hợp lệ (' + r.status + ')' }; }
+    if (!j.success) {
+      const err = new Error(j.message || j.error || 'Lỗi');
+      err.status = r.status;
+      err.data = j;
+      throw err;
+    }
+    return j;
+  }
+
+  const fmt = (ms) => (ms ? new Date(ms).toLocaleString('vi-VN') : '—');
+
+  function remaining(ms) {
+    if (ms <= 0) return '';
+    const m = Math.floor(ms / 60000);
+    const d = Math.floor(m / 1440);
+    const hh = Math.floor((m % 1440) / 60);
+    if (d >= 1) return `còn ${d} ngày ${hh} giờ`;
+    if (hh >= 1) return `còn ${hh} giờ ${m % 60} phút`;
+    return `còn ${m} phút`;
+  }
+
+  const durLabel = (r) => (r.duration === 'lifetime' ? 'Vĩnh viễn' : `${r.quantity} ${UNIT_VI[r.duration] || r.duration}`);
+
+  function expiresCell(r) {
+    if (r.duration === 'lifetime') return '∞';
+    if (r.state === 'unused') return 'Chưa kích hoạt';
+    return [fmt(r.expiresAt), h('div', { class: 'muted' }, remaining(r.expiresAt - Date.now()))];
+  }
+
+  // ---------- list ----------
+  async function load() {
+    const j = await api('list', { limit: Number($('#limit').value) || 200 });
+    rows = j.keys;
+    for (const k of [...selected]) if (!rows.some((r) => r.key === k)) selected.delete(k);
+    render();
+  }
+
+  function visibleRows() {
+    const tier = $('#fTier').value;
+    const st = $('#fState').value;
+    const q = $('#fSearch').value.trim().toUpperCase();
+    return rows.filter((r) =>
+      (!tier || r.tier === tier) &&
+      (!st || r.state === st) &&
+      (!q || r.key.includes(q) || (r.note || '').toUpperCase().includes(q)));
+  }
+
+  function bulkBar() {
+    $('#bulk').hidden = selected.size === 0;
+    $('#bulkInfo').textContent = `${selected.size} key đã chọn`;
+  }
+
+  async function run(action, body, okMsg) {
+    try {
+      const j = await api(action, body);
+      let msg = okMsg || 'Xong';
+      if (j.notFound && j.notFound.length) msg += ` (không thấy ${j.notFound.length} key)`;
+      const errs = Object.keys(j.errors || {});
+      if (errs.length) msg += ` (${errs.length} key bị bỏ qua: ${j.errors[errs[0]]})`;
+      toast(msg, errs.length > 0);
+      await load();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  function parseExtend(s) {
+    const m = String(s || '').trim().toLowerCase().match(/^(\d+)\s*(hour|day|week|month|year|h|d|w|m|y)s?$/);
+    if (!m) return null;
+    const map = { h: 'hour', d: 'day', w: 'week', m: 'month', y: 'year' };
+    return { quantity: Number(m[1]), duration: map[m[2]] || m[2] };
+  }
+
+  function detailRow(r) {
+    const list = r.devices.length
+      ? r.devices.map((d) => h('div', { class: 'bar' },
+          h('span', { class: 'mono' }, d.hwid),
+          h('span', { class: 'muted' }, `${d.name || 'không tên'} · đăng ký ${fmt(d.firstSeen)} · dùng gần nhất ${fmt(d.lastSeen)}`),
+          h('button', { class: 'sm ghost', onclick: () => {
+            if (confirm('Gỡ thiết bị này khỏi key?')) run('reset-devices', { key: r.key, hwid: d.hwid }, 'Đã gỡ thiết bị');
+          } }, 'Gỡ')))
+      : h('span', { class: 'muted' }, 'Chưa có thiết bị nào');
+    const extra = [];
+    if (r.state === 'banned') extra.push(h('div', { class: 'muted' }, `Khoá lúc ${fmt(r.bannedAt)}${r.banReason ? ' · ' + r.banReason : ''}`));
+    extra.push(h('div', { class: 'muted' }, `Tạo ${fmt(r.createdAt)} · kích hoạt ${fmt(r.activatedAt)} · khoá thiết bị: ${r.deviceLock ? 'bật' : 'tắt'}`));
+    return h('tr', { class: 'detail' }, h('td', { colspan: 9 }, list, extra));
+  }
+
+  function render() {
+    const list = visibleRows();
+    $('#summary').textContent = `(${list.length}/${rows.length})`;
+    $('#selAll').checked = list.length > 0 && list.every((r) => selected.has(r.key));
+    const tb = $('#tbody');
+    tb.replaceChildren();
+
+    for (const r of list) {
+      tb.append(h('tr', {},
+        h('td', {}, h('input', { type: 'checkbox', checked: selected.has(r.key), onchange: (e) => {
+          if (e.target.checked) selected.add(r.key); else selected.delete(r.key);
+          bulkBar();
+        } })),
+        h('td', { class: 'mono link', onclick: () => { openKey = openKey === r.key ? null : r.key; render(); } }, r.key),
+        h('td', {}, h('span', { class: 'badge b-' + r.tier }, r.tier)),
+        h('td', {}, durLabel(r)),
+        h('td', {}, h('span', { class: 'badge b-' + r.state }, STATE_VI[r.state] || r.state)),
+        h('td', {}, expiresCell(r)),
+        h('td', {}, r.deviceLock ? `${r.devicesUsed}/${r.maxDevices}` : 'không khoá'),
+        h('td', {}, r.note),
+        h('td', {}, h('div', { class: 'actions' },
+          r.state === 'banned'
+            ? h('button', { class: 'sm ghost', onclick: () => run('unban', { key: r.key }, 'Đã mở khoá') }, 'Mở khoá')
+            : h('button', { class: 'sm ghost', onclick: () => {
+                const reason = prompt('Lý do khoá (có thể bỏ trống):');
+                if (reason !== null) run('ban', { key: r.key, reason }, 'Đã khoá');
+              } }, 'Khoá'),
+          h('button', { class: 'sm ghost', disabled: r.duration === 'lifetime', onclick: () => {
+            const p = parseExtend(prompt('Gia hạn thêm (vd: 7 day, 1 month, 12 hour):', '1 month'));
+            if (!p) { toast('Sai định dạng. Ví dụ: 7 day, 1 month, 12 hour', true); return; }
+            run('extend', { key: r.key, ...p }, 'Đã gia hạn');
+          } }, 'Gia hạn'),
+          h('button', { class: 'sm ghost', onclick: () => {
+            if (confirm('Gỡ TẤT CẢ thiết bị của key này?')) run('reset-devices', { key: r.key }, 'Đã reset thiết bị');
+          } }, 'Reset TB'),
+          h('button', { class: 'sm danger', onclick: () => {
+            if (confirm('Xoá vĩnh viễn key ' + r.key + '?')) run('delete', { key: r.key }, 'Đã xoá');
+          } }, 'Xoá')))
+      ));
+      if (openKey === r.key) tb.append(detailRow(r));
+    }
+    bulkBar();
+  }
+
+  // ---------- create ----------
+  let lastKeys = [];
+  async function create() {
+    const body = {
+      tier: $('#tier').value,
+      duration: $('#duration').value,
+      quantity: Number($('#quantity').value),
+      count: Number($('#count').value),
+      maxDevices: Number($('#maxDevices').value),
+      deviceLock: $('#deviceLock').checked,
+      prefix: $('#prefix').value.trim(),
+      note: $('#note').value.trim(),
+    };
+    $('#btnCreate').disabled = true;
+    try {
+      const j = await api('create', body);
+      lastKeys = j.keys;
+      $('#createText').value = j.keys.join('\n');
+      $('#createInfo').textContent = `Đã tạo ${j.count} key ${j.tier}`;
+      $('#createOut').hidden = false;
+      toast(`Đã tạo ${j.count} key`);
+      await load();
+    } catch (e) {
+      if (e.data && e.data.created && e.data.created.length) {
+        lastKeys = e.data.created;
+        $('#createText').value = lastKeys.join('\n');
+        $('#createInfo').textContent = `Chỉ tạo được ${lastKeys.length} key (bị gián đoạn)`;
+        $('#createOut').hidden = false;
+      }
+      toast(e.message, true);
+    } finally {
+      $('#btnCreate').disabled = false;
+    }
+  }
+
+  // ---------- login ----------
+  async function enter() {
+    try {
+      await load();
+      $('#login').hidden = true;
+      $('#app').hidden = false;
+      $('#btnLogout').hidden = false;
+      try { sessionStorage.setItem('adm', secret); } catch (e) { /* ignore */ }
+    } catch (e) {
+      $('#loginErr').textContent = e.message;
+      $('#login').hidden = false;
+      $('#app').hidden = true;
+      try { sessionStorage.removeItem('adm'); } catch (e2) { /* ignore */ }
+    }
+  }
+
+  $('#btnLogin').addEventListener('click', () => { secret = $('#secret').value.trim(); enter(); });
+  $('#secret').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnLogin').click(); });
+  $('#btnLogout').addEventListener('click', () => {
+    try { sessionStorage.removeItem('adm'); } catch (e) { /* ignore */ }
+    location.reload();
+  });
+
+  $('#duration').addEventListener('change', (e) => { $('#quantity').disabled = e.target.value === 'lifetime'; });
+  $('#btnCreate').addEventListener('click', create);
+  $('#btnCopy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(lastKeys.join('\n')); toast('Đã copy'); }
+    catch (e) { $('#createText').select(); toast('Hãy copy thủ công (Ctrl+C)', true); }
+  });
+  $('#btnDownload').addEventListener('click', () => {
+    const a = h('a', { href: URL.createObjectURL(new Blob([lastKeys.join('\n') + '\n'], { type: 'text/plain' })), download: 'keys-' + Date.now() + '.txt' });
+    document.body.append(a);
+    a.click();
+    a.remove();
+  });
+
+  $('#btnReload').addEventListener('click', () => load().catch((e) => toast(e.message, true)));
+  $('#limit').addEventListener('change', () => load().catch((e) => toast(e.message, true)));
+  for (const id of ['#fTier', '#fState']) $(id).addEventListener('change', render);
+  $('#fSearch').addEventListener('input', render);
+  $('#selAll').addEventListener('change', (e) => {
+    for (const r of visibleRows()) { if (e.target.checked) selected.add(r.key); else selected.delete(r.key); }
+    render();
+  });
+
+  $('#bulkBan').addEventListener('click', () => {
+    const reason = prompt('Lý do khoá (có thể bỏ trống):');
+    if (reason !== null) run('ban', { keys: [...selected], reason }, 'Đã khoá');
+  });
+  $('#bulkUnban').addEventListener('click', () => run('unban', { keys: [...selected] }, 'Đã mở khoá'));
+  $('#bulkDel').addEventListener('click', () => {
+    if (confirm(`Xoá vĩnh viễn ${selected.size} key đã chọn?`)) {
+      run('delete', { keys: [...selected] }, 'Đã xoá').then(() => selected.clear());
+    }
+  });
+
+  if (secret) enter();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "license-key-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "License key API (basic/premium, hour..lifetime, HWID device lock) for Vercel + Firestore",
+  "scripts": {
+    "test": "node test/smoke.test.js"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}

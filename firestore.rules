@@ -1,0 +1,9 @@
+rules_version = '2';
+// Chặn toàn bộ truy cập trực tiếp từ client. Server (firebase-admin) vẫn đọc/ghi bình thường.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
