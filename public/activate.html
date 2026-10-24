@@ -1,106 +1,770 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Nhập key</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#05050a">
+<title>LeviZ · Tuning</title>
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
-         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f1115; color: #e6e8ee; }
-  .box { width: 100%; max-width: 420px; background: #171a21; border: 1px solid #262b36; border-radius: 14px; padding: 22px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  p.sub { margin: 0 0 16px; color: #8892a6; font-size: 14px; }
-  input, button { width: 100%; font: inherit; border-radius: 8px; padding: 12px; }
-  input { background: #0f1218; border: 1px solid #2c3340; color: #e6e8ee; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
-  button { margin-top: 12px; border: 0; background: #2b5cff; color: #fff; cursor: pointer; font-weight: 600; }
-  button:disabled { opacity: .5; cursor: wait; }
-  #out { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; word-break: break-word; }
-  #out.ok { display: block; background: #12351f; color: #8df0b4; }
-  #out.bad { display: block; background: #3d1717; color: #ff9b9b; }
-  #out div + div { margin-top: 4px; }
-  .dev { margin-top: 14px; font-size: 12px; color: #6b7488; text-align: center; }
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+:root{
+  --bg:#05050a;
+  --glass:rgba(255,255,255,.07);
+  --glass-hi:rgba(255,255,255,.13);
+  --stroke:rgba(255,255,255,.14);
+  --stroke-hi:rgba(255,255,255,.24);
+  --text:#f5f5f7;
+  --dim:rgba(245,245,247,.5);
+  --accent:#0a84ff;
+  --purple:#bf5af2;
+  --green:#30d158;
+  --red:#ff453a;
+  --radius:22px;
+}
+html,body{height:100%;overflow-x:hidden;background:var(--bg);color:var(--text);font-family:'Outfit',-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
+
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:#000}
+#bg::before{
+  content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(10,132,255,.35) 0%, transparent 45%),
+    radial-gradient(circle at 80% 20%, rgba(191,90,242,.3) 0%, transparent 50%),
+    radial-gradient(circle at 50% 90%, rgba(48,209,88,.2) 0%, transparent 55%);
+  filter:blur(60px);
+}
+#bg::after{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,.7) 100%);
+}
+
+.glass{
+  background:var(--glass);
+  backdrop-filter:blur(36px) saturate(180%);
+  -webkit-backdrop-filter:blur(36px) saturate(180%);
+  border:1px solid var(--stroke);
+  border-radius:var(--radius);
+  box-shadow:
+    0 12px 40px rgba(0,0,0,.35),
+    inset 0 1px 0 rgba(255,255,255,.2),
+    inset 0 -1px 0 rgba(0,0,0,.1);
+  position:relative;
+}
+
+.shell{max-width:500px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));position:relative;z-index:1}
+
+.screen{display:none}
+.screen.active{display:block}
+
+/* ============ LOGIN ============ */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+#login.active{display:flex}
+.login{
+  width:100%;max-width:380px;padding:36px 24px 28px;text-align:center;
+  animation:rise .6s cubic-bezier(.2,.9,.3,1) both;
+}
+@keyframes rise{from{opacity:0;transform:translateY(24px) scale(.96)}to{opacity:1;transform:none}}
+
+.mark{
+  width:72px;height:72px;margin:0 auto 22px;border-radius:20px;
+  background:linear-gradient(140deg,#0a84ff 0%,#bf5af2 100%);
+  display:grid;place-items:center;
+  font-size:26px;font-weight:800;color:#fff;letter-spacing:-.02em;
+  box-shadow:
+    0 12px 40px rgba(10,132,255,.45),
+    inset 0 1px 0 rgba(255,255,255,.4);
+  position:relative;
+}
+.mark::before{
+  content:"";position:absolute;inset:-8px;border-radius:26px;
+  border:1px dashed rgba(10,132,255,.3);
+  animation:spin 16s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.login h1{
+  font-size:24px;font-weight:800;letter-spacing:.02em;margin-bottom:6px;
+  background:linear-gradient(120deg,#fff 0%,#0a84ff 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.login .sub{font-size:12.5px;color:var(--dim);margin-bottom:28px;letter-spacing:.04em}
+
+.key-wrap{position:relative;margin-bottom:14px}
+.key-wrap input{
+  width:100%;height:52px;
+  background:rgba(0,0,0,.45);
+  border:1px solid var(--stroke);
+  border-radius:14px;
+  color:var(--accent);
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;letter-spacing:.08em;
+  padding:0 16px;text-align:center;
+  outline:none;transition:.3s;
+}
+.key-wrap input::placeholder{color:rgba(255,255,255,.18);letter-spacing:.05em}
+.key-wrap input:focus{
+  border-color:rgba(10,132,255,.6);
+  box-shadow:0 0 0 4px rgba(10,132,255,.12),0 0 20px rgba(10,132,255,.2);
+}
+
+.submit{
+  width:100%;height:52px;border:0;border-radius:14px;
+  background:linear-gradient(135deg,#0a84ff 0%,#bf5af2 100%);
+  color:#fff;font-size:14px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  font-family:inherit;cursor:pointer;
+  box-shadow:0 12px 32px -8px rgba(10,132,255,.55),inset 0 1px 0 rgba(255,255,255,.3);
+  transition:transform .15s cubic-bezier(.2,.8,.2,1),box-shadow .2s;
+}
+.submit:active{transform:scale(.97)}
+.submit:disabled{opacity:.5;cursor:not-allowed}
+
+.status{min-height:20px;margin-top:16px;font-size:12.5px;font-weight:600}
+.status.load{color:var(--dim)}
+.status.ok{color:var(--green)}
+.status.bad{color:var(--red)}
+
+.meta{
+  margin-top:22px;padding:10px 14px;border-radius:10px;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.06);
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--dim);word-break:break-all;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.meta .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0}
+.meta .dot.off{background:var(--red);box-shadow:0 0 8px var(--red)}
+
+/* ============ HEADER ============ */
+.head{display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:14px}
+.avatar{
+  width:42px;height:42px;border-radius:12px;flex-shrink:0;
+  background:linear-gradient(140deg,#0a84ff,#bf5af2);
+  display:grid;place-items:center;
+  font-size:16px;font-weight:800;color:#fff;
+  box-shadow:0 6px 20px rgba(10,132,255,.4),inset 0 1px 0 rgba(255,255,255,.3);
+}
+.head-info{flex:1;min-width:0}
+.head-title{font-size:14px;font-weight:800;letter-spacing:.04em;margin-bottom:2px}
+.head-sub{font-size:11px;color:var(--accent);font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.logout{
+  height:32px;padding:0 14px;border-radius:9px;
+  background:rgba(255,69,58,.1);border:1px solid rgba(255,69,58,.28);
+  color:var(--red);font-size:11px;font-weight:700;
+  font-family:inherit;cursor:pointer;flex-shrink:0;transition:transform .15s;
+}
+.logout:active{transform:scale(.94)}
+
+/* ============ TABS ============ */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:5px;margin-bottom:14px;border-radius:16px}
+.tab{
+  height:38px;border:0;border-radius:12px;background:transparent;
+  color:var(--dim);font-size:12.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:.3s cubic-bezier(.2,.9,.3,1);
+}
+.tab.active{
+  background:var(--glass-hi);color:var(--text);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.28),0 4px 12px rgba(0,0,0,.2);
+}
+.tab:active:not(.active){transform:scale(.96)}
+
+.panel{display:none}
+.panel.active{display:block;animation:fade .35s cubic-bezier(.2,.8,.2,1)}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ============ CARD ============ */
+.card{padding:16px 18px;margin-bottom:12px}
+.card-title{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.16em;
+  color:var(--dim);margin-bottom:14px;
+}
+
+/* ============ METRICS ============ */
+.metric{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);
+  font-size:13px;
+}
+.metric:last-child{border-bottom:none;padding-bottom:0}
+.metric:first-of-type{padding-top:0}
+.metric .k{color:var(--dim)}
+.metric .v{font-weight:700;font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',monospace;font-size:12px}
+
+/* ============ SLIDERS ============ */
+.slider-group{margin-bottom:18px}
+.slider-group:last-child{margin-bottom:0}
+.slider-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.slider-top .name{font-size:13px;font-weight:600}
+.slider-top .val{
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
+  color:var(--accent);min-width:32px;text-align:right;
+}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  width:100%;height:6px;border-radius:3px;
+  background:rgba(255,255,255,.12);
+  outline:none;cursor:pointer;
+  transition:opacity .2s;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:24px;height:24px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff 0%,#e5e5e5 100%);
+  box-shadow:0 3px 10px rgba(0,0,0,.4),inset 0 1px 0 #fff;
+  cursor:grab;
+  transition:transform .15s cubic-bezier(.3,1.5,.5,1),box-shadow .2s;
+}
+input[type=range]::-webkit-slider-thumb:active{
+  transform:scale(1.18);cursor:grabbing;
+  box-shadow:0 4px 16px rgba(10,132,255,.5),inset 0 1px 0 #fff;
+}
+input[type=range]::-moz-range-thumb{
+  width:24px;height:24px;border-radius:50%;background:#fff;border:0;
+  box-shadow:0 3px 10px rgba(0,0,0,.4);cursor:grab;
+}
+input[type=range]:disabled{opacity:.35;cursor:not-allowed}
+
+/* ============ FEATURES ============ */
+.features{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.feat{
+  padding:16px 12px;border-radius:18px;
+  background:var(--glass);
+  backdrop-filter:blur(28px) saturate(180%);
+  -webkit-backdrop-filter:blur(28px) saturate(180%);
+  border:1px solid var(--stroke);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.22),
+    0 4px 16px rgba(0,0,0,.2);
+  color:var(--text);
+  font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.02em;
+  cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  position:relative;overflow:hidden;
+  transition:transform .15s cubic-bezier(.2,.8,.2,1),box-shadow .25s,background .25s,border-color .25s;
+}
+.feat .ico{font-size:22px;line-height:1;filter:drop-shadow(0 1px 3px rgba(0,0,0,.3))}
+.feat:active{transform:scale(.94)}
+.feat.on{
+  background:linear-gradient(135deg,rgba(10,132,255,.32),rgba(191,90,242,.18));
+  border-color:rgba(10,132,255,.6);
+  box-shadow:0 0 24px rgba(10,132,255,.4),inset 0 1px 0 rgba(255,255,255,.35);
+}
+.feat.locked{opacity:.4;pointer-events:none}
+.feat .tag{
+  position:absolute;top:6px;right:8px;
+  font-size:8.5px;padding:2px 6px;border-radius:7px;
+  background:rgba(191,90,242,.4);color:#f0d0ff;
+  font-weight:800;letter-spacing:.3px;
+}
+.feat .ripple{
+  position:absolute;border-radius:50%;transform:scale(0);
+  animation:rippleAnim .65s ease-out;
+  background:rgba(255,255,255,.35);pointer-events:none;
+}
+@keyframes rippleAnim{to{transform:scale(4.5);opacity:0}}
+
+/* ============ ADMIN INFO ============ */
+.info-row{display:flex;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.info-row:last-child{border-bottom:none;padding-bottom:0}
+.info-row:first-of-type{padding-top:0}
+.info-icon{
+  width:38px;height:38px;border-radius:11px;flex-shrink:0;
+  display:grid;place-items:center;font-size:17px;
+  background:rgba(255,255,255,.07);border:1px solid var(--stroke);
+}
+.info-body{flex:1;min-width:0}
+.info-label{font-size:10px;color:var(--dim);font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.info-val{font-size:13.5px;font-weight:600;word-break:break-all}
+.info-val a{color:var(--accent);text-decoration:none}
+.copy-btn{
+  padding:4px 10px;border-radius:7px;
+  background:rgba(255,255,255,.08);border:1px solid var(--stroke);
+  color:var(--text);font-size:10.5px;font-family:inherit;font-weight:600;
+  cursor:pointer;margin-left:8px;transition:transform .15s;
+}
+.copy-btn:active{transform:scale(.94)}
+
+/* ============ VERSION ============ */
+.ver-card{
+  padding:18px 20px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+}
+.ver-card .vt{font-size:15px;font-weight:800;letter-spacing:.04em}
+.ver-card .vs{font-size:11px;color:var(--dim);margin-top:4px}
+.badge{
+  font-size:9.5px;font-weight:800;letter-spacing:.1em;
+  padding:5px 10px;border-radius:99px;
+  background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.35);
+  color:var(--green);flex-shrink:0;
+}
+
+/* ============ TOAST ============ */
+.toast{
+  position:fixed;bottom:24px;left:50%;transform:translate(-50%,150%);
+  background:rgba(20,20,30,.95);backdrop-filter:blur(20px);
+  border:1px solid var(--stroke-hi);color:var(--text);
+  padding:12px 20px;border-radius:14px;
+  font-size:12.5px;font-weight:600;
+  z-index:999;max-width:88vw;text-align:center;
+  transition:transform .35s cubic-bezier(.3,1.5,.5,1);
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.toast.ok{border-color:rgba(48,209,88,.5);color:var(--green)}
+.toast.bad{border-color:rgba(255,69,58,.5);color:var(--red)}
+.toast.show{transform:translate(-50%,0)}
 </style>
 </head>
 <body>
-<div class="box">
-  <h1>Kích hoạt key</h1>
-  <p class="sub">Nhập key bạn đã mua để kiểm tra và đăng ký thiết bị này.</p>
-  <input id="key" placeholder="PREM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
-  <button id="go">Kiểm tra key</button>
-  <div id="out"></div>
-  <div class="dev">Mã thiết bị: <span id="dev"></span></div>
-</div>
+
+<div id="bg"></div>
+
+<!-- ================= LOGIN ================= -->
+<section id="login" class="screen active">
+  <div class="login glass">
+    <div class="mark">L</div>
+    <h1>LeviZ</h1>
+    <p class="sub">Nhập key để kích hoạt</p>
+    <div class="key-wrap">
+      <input type="text" id="keyInput" placeholder="P-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+    </div>
+    <button class="submit" id="btnLogin">KÍCH HOẠT</button>
+    <div class="status" id="loginStatus"></div>
+    <div class="meta">
+      <span class="dot" id="srvDot"></span>
+      <span id="hwidText">DEVICE: --</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= APP ================= -->
+<section id="app" class="screen">
+  <div class="shell">
+    <header class="head glass">
+      <div class="avatar" id="avatar">L</div>
+      <div class="head-info">
+        <div class="head-title">LeviZ</div>
+        <div class="head-sub" id="keyInfo">--</div>
+      </div>
+      <button class="logout" id="btnLogout">THOÁT</button>
+    </header>
+
+    <nav class="tabs glass">
+      <button class="tab active" data-tab="tool">Tuning</button>
+      <button class="tab" data-tab="admin">Admin</button>
+      <button class="tab" data-tab="version">Version</button>
+    </nav>
+
+    <!-- ===== TAB: TUNING ===== -->
+    <div class="panel active" id="panel-tool">
+      <div class="card glass">
+        <div class="card-title">Thiết bị</div>
+        <div class="metric"><span class="k">Thiết bị</span><span class="v" id="mDevice">—</span></div>
+        <div class="metric"><span class="k">Hệ điều hành</span><span class="v" id="mOS">—</span></div>
+        <div class="metric"><span class="k">CPU</span><span class="v" id="mCPU">—</span></div>
+        <div class="metric"><span class="k">RAM</span><span class="v" id="mRAM">—</span></div>
+        <div class="metric"><span class="k">Độ phân giải</span><span class="v" id="mRes">—</span></div>
+        <div class="metric"><span class="k">Pin</span><span class="v" id="mBattery">—</span></div>
+        <div class="metric"><span class="k">FPS</span><span class="v" id="mFPS">—</span></div>
+        <div class="metric"><span class="k">Ping</span><span class="v" id="mPing">—</span></div>
+      </div>
+
+      <div class="card glass">
+        <div class="card-title">Thanh kéo</div>
+        <div class="slider-group">
+          <div class="slider-top"><span class="name">Sensi</span><span class="val" id="vSens">50</span></div>
+          <input type="range" id="slSens" min="0" max="100" value="50">
+        </div>
+        <div class="slider-group">
+          <div class="slider-top"><span class="name">Swipe</span><span class="val" id="vSwipe">50</span></div>
+          <input type="range" id="slSwipe" min="0" max="100" value="50">
+        </div>
+      </div>
+
+      <div class="features" id="featGrid">
+        <button class="feat" data-feat="hz120"><span class="ico">⚡</span>120Hz</button>
+        <button class="feat" data-feat="lockhead"><span class="ico">🎯</span>Lock Head<span class="tag">PRO</span></button>
+        <button class="feat" data-feat="smooth"><span class="ico">📉</span>Smooth<span class="tag">PRO</span></button>
+        <button class="feat" data-feat="fastswipe"><span class="ico">👆</span>Fast Swipe<span class="tag">PRO</span></button>
+        <button class="feat" data-feat="boost"><span class="ico">🚀</span>Boost</button>
+        <button class="feat" data-feat="reset"><span class="ico">🔄</span>Reset</button>
+      </div>
+    </div>
+
+    <!-- ===== TAB: ADMIN ===== -->
+    <div class="panel" id="panel-admin">
+      <div class="card glass">
+        <div class="card-title">Tác giả</div>
+        <div class="info-row">
+          <div class="info-icon">👑</div>
+          <div class="info-body">
+            <div class="info-label">Admin duy nhất</div>
+            <div class="info-val">trjsdunqiosche4t</div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">📱</div>
+          <div class="info-body">
+            <div class="info-label">Zalo</div>
+            <div class="info-val">0335849687 <button class="copy-btn" data-copy="0335849687">Copy</button></div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">🎵</div>
+          <div class="info-body">
+            <div class="info-label">TikTok</div>
+            <div class="info-val"><a href="https://tiktok.com/@thaitunhahotran" target="_blank" rel="noopener">@thaitunhahotran</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card glass">
+        <div class="card-title">Phiên hiện tại</div>
+        <div class="info-row">
+          <div class="info-icon">🔑</div>
+          <div class="info-body">
+            <div class="info-label">Key</div>
+            <div class="info-val" id="curKey" style="font-family:'JetBrains Mono',monospace;font-size:11px;">--</div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">⏳</div>
+          <div class="info-body">
+            <div class="info-label">Hạn dùng</div>
+            <div class="info-val" id="curExp">--</div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">🌐</div>
+          <div class="info-body">
+            <div class="info-label">Server</div>
+            <div class="info-val" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim)">api-rust-alpha-49.vercel.app</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TAB: VERSION ===== -->
+    <div class="panel" id="panel-version">
+      <div class="ver-card glass">
+        <div>
+          <div class="vt">LeviZ</div>
+          <div class="vs">Liquid Glass · Build 2026</div>
+        </div>
+        <div class="badge">LATEST</div>
+      </div>
+
+      <div class="card glass">
+        <div class="card-title">Thông tin</div>
+        <div class="info-row">
+          <div class="info-icon">💎</div>
+          <div class="info-body">
+            <div class="info-label">Phiên bản</div>
+            <div class="info-val">1.0.0</div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">🎨</div>
+          <div class="info-body">
+            <div class="info-label">Giao diện</div>
+            <div class="info-val">Liquid Glass iOS 26/27</div>
+          </div>
+        </div>
+        <div class="info-row">
+          <div class="info-icon">🔧</div>
+          <div class="info-body">
+            <div class="info-label">Backend</div>
+            <div class="info-val">Vercel API</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
 
 <script>
-(() => {
-  'use strict';
-  const $ = (s) => document.querySelector(s);
+"use strict";
 
-  // Trình duyệt không đọc được HWID phần cứng, nên tạo mã ngẫu nhiên và lưu lại trên thiết bị này.
-  function getHwid() {
-    let id = null;
-    try { id = localStorage.getItem('hwid'); } catch (e) { /* ignore */ }
-    if (!id) {
-      const a = new Uint8Array(16);
-      crypto.getRandomValues(a);
-      id = 'web-' + Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
-      try { localStorage.setItem('hwid', id); } catch (e) { /* ignore */ }
+/* ============ CONFIG ============ */
+const SERVER_URL = "https://api-rust-alpha-49.vercel.app";
+
+/* ============ HWID ============ */
+function genHwid(){
+  let id = localStorage.getItem("leviz_hwid");
+  if (id) return id;
+  const str = navigator.userAgent + screen.width + "x" + screen.height + navigator.language + Date.now();
+  let h1 = 0x811c9dc5, h2 = 0x9e3779b9;
+  for (let i = 0; i < str.length; i++){
+    const c = str.charCodeAt(i);
+    h1 ^= c; h1 = Math.imul(h1, 16777619) >>> 0;
+    h2 ^= c; h2 = Math.imul(h2, 2246822519) >>> 0;
+  }
+  id = "DEV-" + h1.toString(36).toUpperCase() + h2.toString(36).toUpperCase().slice(0,4);
+  localStorage.setItem("leviz_hwid", id);
+  return id;
+}
+const HWID = genHwid();
+document.getElementById("hwidText").textContent = "DEVICE: " + HWID;
+
+/* ============ HELPERS ============ */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+let toastTimer;
+function toast(msg, ok){
+  const el = $("#toast");
+  el.textContent = msg;
+  el.className = "toast show" + (ok === true ? " ok" : ok === false ? " bad" : "");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2200);
+}
+function setLoginStatus(msg, type){
+  const el = $("#loginStatus");
+  el.textContent = msg || "";
+  el.className = "status" + (type ? " " + type : "");
+}
+function fmtSec(sec){
+  if (!sec || sec < 0) return "0";
+  const d = Math.floor(sec/86400), h = Math.floor((sec%86400)/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60);
+  if (d) return d + "d " + h + "h";
+  if (h) return h + "h " + m + "m";
+  if (m) return m + "m " + s + "s";
+  return s + "s";
+}
+
+/* ============ STATE ============ */
+const state = { key: null, tier: null, expiresIn: null, loggedIn: false };
+
+/* ============ TABS ============ */
+$$(".tab").forEach(tab => {
+  tab.onclick = () => {
+    $$(".tab").forEach(t => t.classList.remove("active"));
+    $$(".panel").forEach(p => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+  };
+});
+
+/* ============ TIER LOCK ============ */
+const PRO_FEATS = ["lockhead", "smooth", "fastswipe"];
+
+function applyTier(){
+  const isPro = state.tier === "premium";
+  $$("#featGrid .feat").forEach(f => {
+    if (PRO_FEATS.includes(f.dataset.feat) && !isPro) {
+      f.classList.add("locked");
+      f.classList.remove("on");
+    } else {
+      f.classList.remove("locked");
     }
-    return id;
+  });
+  const swipeGroup = $("#slSwipe").closest(".slider-group");
+  if (!isPro) {
+    $("#slSwipe").disabled = true;
+    swipeGroup.style.opacity = ".4";
+  } else {
+    $("#slSwipe").disabled = false;
+    swipeGroup.style.opacity = "1";
   }
+}
 
-  const hwid = getHwid();
-  $('#dev').textContent = hwid.slice(0, 12) + '…';
-  try { const saved = localStorage.getItem('key'); if (saved) $('#key').value = saved; } catch (e) { /* ignore */ }
-
-  const fmt = (ms) => new Date(ms).toLocaleString('vi-VN');
-
-  function show(cls, lines) {
-    const out = $('#out');
-    out.className = cls;
-    out.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
-  }
-
-  function remaining(ms) {
-    const m = Math.floor(ms / 60000);
-    const d = Math.floor(m / 1440);
-    const h = Math.floor((m % 1440) / 60);
-    if (d >= 1) return `${d} ngày ${h} giờ`;
-    if (h >= 1) return `${h} giờ ${m % 60} phút`;
-    return `${m} phút`;
-  }
-
-  async function check() {
-    const key = $('#key').value.trim();
-    if (!key) { show('bad', ['Hãy nhập key.']); return; }
-    $('#go').disabled = true;
-    try {
-      const r = await fetch('/api/verify', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key, hwid, deviceName: navigator.platform || 'web' }),
-      });
-      const d = await r.json();
-      if (!d.success) { show('bad', [d.message || d.error || 'Có lỗi xảy ra']); return; }
-      try { localStorage.setItem('key', key); } catch (e) { /* ignore */ }
-      show('ok', [
-        'Key hợp lệ ✔',
-        'Gói: ' + String(d.tier).toUpperCase(),
-        d.lifetime ? 'Thời hạn: Vĩnh viễn' : 'Hết hạn: ' + fmt(d.expiresAt) + ' (còn ' + remaining(d.remainingMs) + ')',
-        d.deviceLock ? 'Thiết bị: ' + d.devicesUsed + '/' + d.maxDevices : 'Không giới hạn thiết bị',
-      ]);
-    } catch (e) {
-      show('bad', ['Không kết nối được máy chủ. Thử lại sau.']);
-    } finally {
-      $('#go').disabled = false;
+/* ============ FEATURE CLICKS ============ */
+$$("#featGrid .feat").forEach(btn => {
+  btn.onpointerdown = e => {
+    if (btn.classList.contains("locked")) return;
+    const r = document.createElement("span");
+    r.className = "ripple";
+    const rect = btn.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    r.style.width = r.style.height = size + "px";
+    r.style.left = (e.clientX - rect.left - size/2) + "px";
+    r.style.top = (e.clientY - rect.top - size/2) + "px";
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 650);
+  };
+  btn.onclick = () => {
+    if (btn.classList.contains("locked")) return;
+    const feat = btn.dataset.feat;
+    if (feat === "reset") {
+      $$("#featGrid .feat").forEach(f => { if (f.dataset.feat !== "reset") f.classList.remove("on"); });
+      $("#slSens").value = 50; $("#vSens").textContent = "50";
+      $("#slSwipe").value = 50; $("#vSwipe").textContent = "50";
+      toast("Đã reset cài đặt");
+      return;
     }
-  }
+    const on = !btn.classList.contains("on");
+    btn.classList.toggle("on", on);
+    toast(btn.textContent.trim().replace(/\s+/g," ") + " · " + (on ? "ON" : "OFF"), on);
+  };
+});
 
-  $('#go').addEventListener('click', check);
-  $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+/* ============ SLIDERS ============ */
+$("#slSens").oninput = () => $("#vSens").textContent = $("#slSens").value;
+$("#slSwipe").oninput = () => $("#vSwipe").textContent = $("#slSwipe").value;
+
+/* ============ DEVICE METRICS ============ */
+(function metrics(){
+  const ua = navigator.userAgent;
+  let device = "Desktop", os = navigator.platform || "Unknown";
+  if (/iPhone/.test(ua)) device = "iPhone";
+  else if (/iPad/.test(ua)) device = "iPad";
+  else if (/Android/.test(ua)) {
+    const m = ua.match(/Android[^;]*;\s*([^)]+)\)/);
+    device = m ? m[1].trim() : "Android";
+  }
+  if (/iPhone OS (\d+)_/.test(ua)) os = "iOS " + ua.match(/iPhone OS (\d+)_/)[1];
+  else if (/Android (\d+)/.test(ua)) os = "Android " + ua.match(/Android (\d+)/)[1];
+
+  $("#mDevice").textContent = device;
+  $("#mOS").textContent = os;
+  $("#mCPU").textContent = navigator.hardwareConcurrency ? navigator.hardwareConcurrency + " nhân" : "—";
+  $("#mRAM").textContent = navigator.deviceMemory ? navigator.deviceMemory + " GB" : "—";
+  $("#mRes").textContent = window.screen.width + "×" + window.screen.height;
+
+  if (navigator.getBattery) {
+    navigator.getBattery().then(b => {
+      const upd = () => $("#mBattery").textContent = Math.round(b.level*100) + "%" + (b.charging ? " ⚡" : "");
+      upd();
+      b.addEventListener("levelchange", upd);
+      b.addEventListener("chargingchange", upd);
+    });
+  }
 })();
+
+(function fpsCounter(){
+  let frames = 0, last = performance.now();
+  function tick(){
+    frames++;
+    const now = performance.now();
+    if (now - last >= 1000){
+      $("#mFPS").textContent = Math.round(frames * 1000 / (now - last)) + " FPS";
+      frames = 0; last = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+
+/* ============ LOGIN ============ */
+async function doLogin(){
+  const key = $("#keyInput").value.trim().toUpperCase();
+  if (!key){ setLoginStatus("Nhập key trước", "bad"); return; }
+  $("#btnLogin").disabled = true;
+  setLoginStatus("Đang kiểm tra...", "load");
+  try {
+    const r = await fetch(SERVER_URL + "/api/validate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ key, hwid: HWID })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok){
+      const map = {
+        invalid_key: "Key không tồn tại",
+        hwid_mismatch: "Key đã khóa cho máy khác",
+        expired: "Key đã hết hạn",
+        missing_key: "Thiếu key",
+        missing_hwid: "Thiếu HWID",
+      };
+      setLoginStatus(map[j.error] || ("Lỗi: " + (j.error || "unknown")), "bad");
+      $("#btnLogin").disabled = false;
+      return;
+    }
+    state.key = key;
+    state.tier = j.tier;
+    state.expiresIn = j.expires_in;
+    state.loggedIn = true;
+    localStorage.setItem("leviz_key", key);
+    setLoginStatus("Kích hoạt thành công", "ok");
+    setTimeout(enterApp, 450);
+  } catch(e){
+    setLoginStatus("Không kết nối được server", "bad");
+  }
+  $("#btnLogin").disabled = false;
+}
+$("#btnLogin").onclick = doLogin;
+$("#keyInput").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+function enterApp(){
+  $("#login").classList.remove("active");
+  $("#app").classList.add("active");
+  window.scrollTo(0, 0);
+  const tierTxt = state.tier === "premium" ? "PREMIUM" : "BASIC";
+  const expTxt = state.expiresIn ? " · " + fmtSec(state.expiresIn) : " · ∞";
+  $("#keyInfo").textContent = tierTxt + expTxt;
+  $("#avatar").textContent = state.tier === "premium" ? "P" : "B";
+  $("#curKey").textContent = state.key;
+  $("#curExp").textContent = state.expiresIn ? fmtSec(state.expiresIn) + " còn lại" : "Vĩnh viễn";
+  applyTier();
+}
+
+/* ============ LOGOUT ============ */
+$("#btnLogout").onclick = () => {
+  if (!confirm("Đăng xuất?")) return;
+  localStorage.removeItem("leviz_key");
+  location.reload();
+};
+
+/* ============ AUTO RESTORE ============ */
+async function tryRestore(){
+  const key = localStorage.getItem("leviz_key");
+  if (!key) return;
+  try {
+    const r = await fetch(SERVER_URL + "/api/validate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ key, hwid: HWID })
+    });
+    const j = await r.json();
+    if (j.ok){
+      state.key = key;
+      state.tier = j.tier;
+      state.expiresIn = j.expires_in;
+      state.loggedIn = true;
+      enterApp();
+    } else {
+      localStorage.removeItem("leviz_key");
+    }
+  } catch(e){}
+}
+
+/* ============ PING ============ */
+setInterval(async () => {
+  if (!state.loggedIn) return;
+  const t0 = performance.now();
+  try {
+    const r = await fetch(SERVER_URL + "/api/ping", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ key: state.key, hwid: HWID })
+    });
+    $("#mPing").textContent = Math.round(performance.now() - t0) + "ms";
+    const j = await r.json();
+    if (!j.ok && (j.error === "deleted" || j.error === "expired")){
+      localStorage.removeItem("leviz_key");
+      alert("Key đã bị xóa hoặc hết hạn.");
+      location.reload();
+    }
+  } catch(e){
+    $("#mPing").textContent = "—";
+  }
+}, 10000);
+
+/* ============ COPY BUTTONS ============ */
+$$(".copy-btn").forEach(b => {
+  b.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(b.dataset.copy);
+      const old = b.textContent;
+      b.textContent = "Đã copy";
+      setTimeout(() => b.textContent = old, 1200);
+    } catch(e){}
+  };
+});
+
+/* ============ INIT ============ */
+tryRestore();
 </script>
 </body>
 </html>
