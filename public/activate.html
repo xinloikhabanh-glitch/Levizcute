@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Nhập key</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: #0f1115; color: #e6e8ee; }
+  .box { width: 100%; max-width: 420px; background: #171a21; border: 1px solid #262b36; border-radius: 14px; padding: 22px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.sub { margin: 0 0 16px; color: #8892a6; font-size: 14px; }
+  input, button { width: 100%; font: inherit; border-radius: 8px; padding: 12px; }
+  input { background: #0f1218; border: 1px solid #2c3340; color: #e6e8ee; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+  button { margin-top: 12px; border: 0; background: #2b5cff; color: #fff; cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: wait; }
+  #out { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; display: none; word-break: break-word; }
+  #out.ok { display: block; background: #12351f; color: #8df0b4; }
+  #out.bad { display: block; background: #3d1717; color: #ff9b9b; }
+  #out div + div { margin-top: 4px; }
+  .dev { margin-top: 14px; font-size: 12px; color: #6b7488; text-align: center; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>Kích hoạt key</h1>
+  <p class="sub">Nhập key bạn đã mua để kiểm tra và đăng ký thiết bị này.</p>
+  <input id="key" placeholder="PREM-XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+  <button id="go">Kiểm tra key</button>
+  <div id="out"></div>
+  <div class="dev">Mã thiết bị: <span id="dev"></span></div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s) => document.querySelector(s);
+
+  // Trình duyệt không đọc được HWID phần cứng, nên tạo mã ngẫu nhiên và lưu lại trên thiết bị này.
+  function getHwid() {
+    let id = null;
+    try { id = localStorage.getItem('hwid'); } catch (e) { /* ignore */ }
+    if (!id) {
+      const a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      id = 'web-' + Array.from(a, (b) => b.toString(16).padStart(2, '0')).join('');
+      try { localStorage.setItem('hwid', id); } catch (e) { /* ignore */ }
+    }
+    return id;
+  }
+
+  const hwid = getHwid();
+  $('#dev').textContent = hwid.slice(0, 12) + '…';
+  try { const saved = localStorage.getItem('key'); if (saved) $('#key').value = saved; } catch (e) { /* ignore */ }
+
+  const fmt = (ms) => new Date(ms).toLocaleString('vi-VN');
+
+  function show(cls, lines) {
+    const out = $('#out');
+    out.className = cls;
+    out.replaceChildren(...lines.map((t) => { const d = document.createElement('div'); d.textContent = t; return d; }));
+  }
+
+  function remaining(ms) {
+    const m = Math.floor(ms / 60000);
+    const d = Math.floor(m / 1440);
+    const h = Math.floor((m % 1440) / 60);
+    if (d >= 1) return `${d} ngày ${h} giờ`;
+    if (h >= 1) return `${h} giờ ${m % 60} phút`;
+    return `${m} phút`;
+  }
+
+  async function check() {
+    const key = $('#key').value.trim();
+    if (!key) { show('bad', ['Hãy nhập key.']); return; }
+    $('#go').disabled = true;
+    try {
+      const r = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key, hwid, deviceName: navigator.platform || 'web' }),
+      });
+      const d = await r.json();
+      if (!d.success) { show('bad', [d.message || d.error || 'Có lỗi xảy ra']); return; }
+      try { localStorage.setItem('key', key); } catch (e) { /* ignore */ }
+      show('ok', [
+        'Key hợp lệ ✔',
+        'Gói: ' + String(d.tier).toUpperCase(),
+        d.lifetime ? 'Thời hạn: Vĩnh viễn' : 'Hết hạn: ' + fmt(d.expiresAt) + ' (còn ' + remaining(d.remainingMs) + ')',
+        d.deviceLock ? 'Thiết bị: ' + d.devicesUsed + '/' + d.maxDevices : 'Không giới hạn thiết bị',
+      ]);
+    } catch (e) {
+      show('bad', ['Không kết nối được máy chủ. Thử lại sau.']);
+    } finally {
+      $('#go').disabled = false;
+    }
+  }
+
+  $('#go').addEventListener('click', check);
+  $('#key').addEventListener('keydown', (e) => { if (e.key === 'Enter') check(); });
+})();
+</script>
+</body>
+</html>
