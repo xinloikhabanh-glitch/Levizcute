@@ -1,23 +1,10 @@
 'use strict';
 
-const { getDb } = require('../lib/firebase');
-const { verifyKey } = require('../lib/license');
-const {
-  ok,
-  fail,
-  handleError,
-  parseBody,
-  normalizeKey,
-  normalizeHwid,
-  setCors,
-} = require('../lib/util');
+const L = require('./_lib');
 
-/**
- * POST /api/verify
- * body: { key, hwid, deviceName? }
- */
+// POST /api/verify   body: { key, hwid, deviceName? }
 module.exports = async function handler(req, res) {
-  setCors(res);
+  L.setCors(res);
 
   if (req.method === 'OPTIONS') {
     res.statusCode = 204;
@@ -25,25 +12,25 @@ module.exports = async function handler(req, res) {
   }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST, OPTIONS');
-    return fail(res, 'METHOD_NOT_ALLOWED');
+    return L.fail(res, 'METHOD_NOT_ALLOWED');
   }
 
   try {
-    const body = parseBody(req);
+    const body = L.parseBody(req);
 
-    const key = normalizeKey(body.key);
-    if (!key) return fail(res, 'INVALID_KEY');
+    const key = L.normalizeKey(body.key);
+    if (!key) return L.fail(res, 'INVALID_KEY');
 
     let hwid = null;
     if (body.hwid !== undefined && body.hwid !== null && body.hwid !== '') {
-      hwid = normalizeHwid(body.hwid);
-      if (!hwid) return fail(res, 'BAD_REQUEST', 'hwid không hợp lệ (6-256 ký tự)');
+      hwid = L.normalizeHwid(body.hwid);
+      if (!hwid) return L.fail(res, 'BAD_REQUEST', 'hwid không hợp lệ (6-256 ký tự)');
     }
 
-    const result = await verifyKey(getDb(), { key, hwid, deviceName: body.deviceName });
-    if (result.error) return fail(res, result.error, undefined, result.extra);
-    return ok(res, result.data);
+    const result = await L.verifyKey(L.getDb(), { key, hwid, deviceName: body.deviceName });
+    if (result.error) return L.fail(res, result.error, undefined, result.extra);
+    return L.ok(res, result.data);
   } catch (err) {
-    return handleError(res, err);
+    return L.handleError(res, err);
   }
 };
