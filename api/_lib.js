@@ -44,6 +44,9 @@ const HTTP_STATUS = {
   KEY_EXPIRED: 403,
   DEVICE_LIMIT: 403,
   METHOD_NOT_ALLOWED: 405,
+  RATE_LIMITED: 429,
+  UPDATE_REQUIRED: 426,
+  MAINTENANCE: 503,
   PARTIAL: 500,
   SERVER_ERROR: 500,
 };
@@ -57,6 +60,9 @@ const MESSAGES = {
   KEY_EXPIRED: 'Key đã hết hạn',
   DEVICE_LIMIT: 'Key đã đạt số thiết bị tối đa',
   METHOD_NOT_ALLOWED: 'Sai phương thức HTTP',
+  RATE_LIMITED: 'Thử sai quá nhiều lần, vui lòng đợi rồi thử lại',
+  UPDATE_REQUIRED: 'Cần cập nhật ứng dụng lên phiên bản mới',
+  MAINTENANCE: 'Hệ thống đang bảo trì, vui lòng quay lại sau',
   PARTIAL: 'Tạo key bị gián đoạn, chỉ một phần được tạo',
   SERVER_ERROR: 'Lỗi máy chủ',
 };
@@ -282,8 +288,9 @@ async function verifyKey(database, { key, hwid, deviceName }) {
 
     const d = snap.data();
     const now = Date.now();
-    if (d.status === 'banned') return { error: 'KEY_BANNED' };
+    if (d.status === 'banned') return { error: 'KEY_BANNED', events: ['banned_use'], tier: d.tier };
 
+    const events = [];
     const updates = {};
     let activatedAt = d.activatedAt || null;
     let expiresAt = d.expiresAt == null ? null : d.expiresAt;
@@ -291,6 +298,7 @@ async function verifyKey(database, { key, hwid, deviceName }) {
     if (!activatedAt) {
       // Lần đầu dùng: bắt đầu tính thời hạn từ lúc này
       activatedAt = now;
+      events.push('activated');
       expiresAt = d.durationMs ? now + d.durationMs : null;
       updates.activatedAt = activatedAt;
       updates.expiresAt = expiresAt;
@@ -317,9 +325,12 @@ async function verifyKey(database, { key, hwid, deviceName }) {
           updates.devices = devices;
         }
       } else {
-        if (devices.length >= maxDevices) return { error: 'DEVICE_LIMIT', extra: { maxDevices } };
+        if (devices.length >= maxDevices) {
+          return { error: 'DEVICE_LIMIT', extra: { maxDevices }, events: ['device_limit'], tier: d.tier };
+        }
         devices = devices.concat([{ hwid, name, firstSeen: now, lastSeen: now }]);
         updates.devices = devices;
+        events.push('new_device');
       }
     }
 
@@ -329,6 +340,8 @@ async function verifyKey(database, { key, hwid, deviceName }) {
     }
 
     return {
+      events,
+      tier: d.tier,
       data: {
         key,
         tier: d.tier,
@@ -344,6 +357,181 @@ async function verifyKey(database, { key, hwid, deviceName }) {
       },
     };
   });
+}
+
+// ================= CÔNG TẮC KHẨN CẤP (cấu hình toàn cục) =================
+const META_COLLECTION = process.env.FIRESTORE_META_COLLECTION || 'license_meta';
+const EVENTS_COLLECTION = process.env.FIRESTORE_EVENTS_COLLECTION || 'license_events';
+const RATE_COLLECTION = process.env.FIRESTORE_RATE_COLLECTION || 'license_ratelimit';
+
+const DEFAULT_CONFIG = {
+  maintenance: false,
+  maintenanceMessage: '',
+  minVersion: '',
+  latestVersion: '',
+  updateUrl: '',
+  announcement: '',
+};
+let cfgCache = { at: 0, v: null };
+
+async function getConfig(database, force) {
+  const now = Date.now();
+  if (!force && cfgCache.v && now - cfgCache.at < 30000) return cfgCache.v;
+  let v = { ...DEFAULT_CONFIG };
+  try {
+    const s = await database.collection(META_COLLECTION).doc('app').get();
+    if (s.exists) v = { ...v, ...s.data() };
+  } catch (e) {
+    console.error(e);
+    if (cfgCache.v) return cfgCache.v;
+  }
+  cfgCache = { at: now, v };
+  return v;
+}
+
+function setConfigCache(v) {
+  cfgCache = { at: Date.now(), v };
+}
+
+// So sánh phiên bản dạng 1.2.3. Trả <0 nếu a < b.
+function cmpVersion(a, b) {
+  const pa = String(a).split('.').map((x) => parseInt(x, 10) || 0);
+  const pb = String(b).split('.').map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+// ================= CHỮ KÝ PHẢN HỒI (ES256, tuỳ chọn) =================
+// Đặt SIGNING_PRIVATE_KEY (PEM hoặc base64 của PEM) để server ký mỗi lần xác thực thành công.
+let signKey; // undefined = chưa nạp, null = không có
+function loadSigningKey() {
+  const raw = (process.env.SIGNING_PRIVATE_KEY || '').trim();
+  if (!raw) return null;
+  try {
+    const pem = raw.includes('BEGIN') ? raw.replace(/\\n/g, '\n') : Buffer.from(raw, 'base64').toString('utf8');
+    return crypto.createPrivateKey(pem);
+  } catch (e) {
+    console.error('SIGNING_PRIVATE_KEY không đọc được');
+    return null;
+  }
+}
+function signingEnabled() {
+  if (signKey === undefined) signKey = loadSigningKey();
+  return !!signKey;
+}
+// Chuỗi được ký: key|tier|expiresAt(0 nếu vĩnh viễn)|serverTime|nonce
+function sigString(d, nonce) {
+  return [d.key, d.tier, d.expiresAt == null ? 0 : d.expiresAt, d.serverTime, nonce || ''].join('|');
+}
+function signMessage(str) {
+  if (!signingEnabled()) return null;
+  return crypto
+    .sign('sha256', Buffer.from(str, 'utf8'), { key: signKey, dsaEncoding: 'ieee-p1363' })
+    .toString('base64');
+}
+function generateSigningKeyPair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const pubDer = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+  const privPem = privateKey.export({ type: 'pkcs8', format: 'pem' });
+  return { publicKey: pubDer, privateKeyBase64: Buffer.from(privPem, 'utf8').toString('base64') };
+}
+
+// ================= GIỚI HẠN THỬ SAI (chống dò mật khẩu admin) =================
+const RATE_MAX_FAILS = 8;
+const RATE_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LOCK_MS = 15 * 60 * 1000;
+
+function clientIp(req) {
+  const h = (req && req.headers) || {};
+  const x = typeof h['x-forwarded-for'] === 'string' ? h['x-forwarded-for'].split(',')[0].trim() : '';
+  return x || (req && req.socket && req.socket.remoteAddress) || 'unknown';
+}
+function rateDoc(database, scope, ip) {
+  const id = scope + '_' + crypto.createHash('sha256').update(String(ip)).digest('hex').slice(0, 24);
+  return database.collection(RATE_COLLECTION).doc(id);
+}
+async function rateCheck(database, scope, ip) {
+  const s = await rateDoc(database, scope, ip).get();
+  if (!s.exists) return { locked: false, fails: 0 };
+  const d = s.data();
+  const now = Date.now();
+  if (d.lockUntil && d.lockUntil > now) return { locked: true, retryAfterSec: Math.ceil((d.lockUntil - now) / 1000), fails: d.fails || 0 };
+  return { locked: false, fails: d.fails || 0 };
+}
+async function rateFail(database, scope, ip) {
+  const ref = rateDoc(database, scope, ip);
+  return database.runTransaction(async (t) => {
+    const s = await t.get(ref);
+    const now = Date.now();
+    let d = s.exists ? s.data() : null;
+    if (!d || now - (d.firstAt || 0) > RATE_WINDOW_MS) d = { fails: 0, firstAt: now, lockUntil: 0 };
+    d.fails += 1;
+    if (d.fails >= RATE_MAX_FAILS) d.lockUntil = now + RATE_LOCK_MS;
+    t.set(ref, d);
+    return d;
+  });
+}
+async function rateClear(database, scope, ip) {
+  await rateDoc(database, scope, ip).delete();
+}
+
+// ================= NHẬT KÝ + THÔNG BÁO TELEGRAM =================
+const EVENT_TEXT = {
+  activated: '🔑 Key được kích hoạt lần đầu',
+  new_device: '📱 Thiết bị mới đăng ký',
+  device_limit: '⚠️ Key đã đủ thiết bị, có máy bị từ chối',
+  banned_use: '⛔ Key bị khoá vẫn có người dùng',
+};
+const EVENT_NOTIFY = new Set(['activated', 'new_device', 'device_limit']);
+
+async function notifyTelegram(text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chat = process.env.TELEGRAM_CHAT_ID;
+  if (!token || !chat || typeof fetch !== 'function') return;
+  const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+  const to = setTimeout(() => ctl && ctl.abort(), 3000);
+  try {
+    await fetch(`https://api.telegram.org/bot${encodeURIComponent(token)}/sendMessage`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chat_id: chat, text }),
+      signal: ctl ? ctl.signal : undefined,
+    });
+  } catch (e) {
+    /* không để lỗi thông báo ảnh hưởng xác thực */
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+async function logEvents(database, req, result, info) {
+  const events = Array.isArray(result.events) ? result.events : [];
+  if (!events.length) return;
+  const ip = clientIp(req);
+  const now = Date.now();
+  const tier = result.tier || (result.data && result.data.tier) || null;
+  for (const type of events) {
+    try {
+      await database.collection(EVENTS_COLLECTION).add({
+        type,
+        key: info.key,
+        tier,
+        hwid: info.hwid || null,
+        deviceName: cleanText(info.deviceName, 64) || null,
+        ip,
+        createdAt: now,
+      });
+    } catch (e) {
+      console.error(e);
+    }
+    if (EVENT_NOTIFY.has(type)) {
+      const name = cleanText(info.deviceName, 64) || 'không rõ tên';
+      await notifyTelegram(`${EVENT_TEXT[type]}\nKey: ${info.key}\nGói: ${tier || '?'}\nMáy: ${name}`);
+    }
+  }
 }
 
 module.exports = {
@@ -371,5 +559,20 @@ module.exports = {
   sleep,
   getDb,
   describe,
+  META_COLLECTION,
+  EVENTS_COLLECTION,
+  getConfig,
+  setConfigCache,
+  cmpVersion,
+  DEFAULT_CONFIG,
+  signingEnabled,
+  sigString,
+  signMessage,
+  generateSigningKeyPair,
+  clientIp,
+  rateCheck,
+  rateFail,
+  rateClear,
+  logEvents,
   verifyKey,
 };

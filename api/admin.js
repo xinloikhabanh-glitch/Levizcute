@@ -4,7 +4,7 @@ const L = require('./_lib');
 const { ApiError, DURATIONS, TIERS, COLLECTION } = L;
 const admin_FieldPath = () => require('firebase-admin').firestore.FieldPath;
 
-// POST /api/admin?action=<create|list|stats|purge|get|ban|unban|delete|reset-devices|extend|update>
+// POST /api/admin?action=<health|create|list|stats|purge|events|config-get|config-set|gen-signing-key|get|ban|unban|delete|reset-devices|extend|update>
 // Header: x-admin-secret: <ADMIN_SECRET>
 
 function providedSecret(req) {
@@ -195,6 +195,66 @@ const actions = {
     return { deleted: snap.size, done: snap.size < 400 };
   },
 
+  // Nhật ký hoạt động (kích hoạt, thiết bị mới, bị từ chối...). Phân trang giống "list".
+  async events(db, p) {
+    const limit = p.limit === undefined ? 100 : L.toInt(p.limit, 1, 500, 'limit');
+    let q = db
+      .collection(L.EVENTS_COLLECTION)
+      .orderBy('createdAt', 'desc')
+      .orderBy(admin_FieldPath().documentId(), 'desc');
+    if (p.after && typeof p.after === 'object' && p.after.id) {
+      const at = Number(p.after.createdAt);
+      if (!Number.isFinite(at) || typeof p.after.id !== 'string') throw new ApiError('BAD_REQUEST', 'after không hợp lệ');
+      q = q.startAfter(at, p.after.id);
+    }
+    const snap = await q.limit(limit).get();
+    const events = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const last = events[events.length - 1];
+    const next = events.length === limit && last ? { createdAt: last.createdAt, id: last.id } : null;
+    return { count: events.length, events, next };
+  },
+
+  async 'config-get'(db) {
+    return { config: await L.getConfig(db, true), signing: L.signingEnabled() };
+  },
+
+  // Công tắc khẩn cấp: bảo trì, bắt buộc cập nhật, thông báo
+  async 'config-set'(db, p) {
+    const cur = await L.getConfig(db, true);
+    const next = { ...cur };
+    if (p.maintenance !== undefined) next.maintenance = L.toBool(p.maintenance, 'maintenance');
+    if (p.maintenanceMessage !== undefined) next.maintenanceMessage = L.cleanText(p.maintenanceMessage, 200);
+    if (p.minVersion !== undefined) {
+      const v = L.cleanText(p.minVersion, 20);
+      if (v && !/^\d+(\.\d+){0,3}$/.test(v)) throw new ApiError('BAD_REQUEST', 'minVersion dạng 1.2.3');
+      next.minVersion = v;
+    }
+    if (p.latestVersion !== undefined) {
+      const v = L.cleanText(p.latestVersion, 20);
+      if (v && !/^\d+(\.\d+){0,3}$/.test(v)) throw new ApiError('BAD_REQUEST', 'latestVersion dạng 1.2.3');
+      next.latestVersion = v;
+    }
+    if (p.updateUrl !== undefined) {
+      const u = L.cleanText(p.updateUrl, 300);
+      if (u && !/^https:\/\//i.test(u)) throw new ApiError('BAD_REQUEST', 'updateUrl phải bắt đầu bằng https://');
+      next.updateUrl = u;
+    }
+    if (p.announcement !== undefined) next.announcement = L.cleanText(p.announcement, 300);
+    await db.collection(L.META_COLLECTION).doc('app').set(next);
+    L.setConfigCache(next);
+    return { config: next };
+  },
+
+  // Tạo cặp khoá ES256 để ký phản hồi. KHÔNG lưu ở server: bạn tự dán vào Vercel.
+  async 'gen-signing-key'() {
+    const k = L.generateSigningKeyPair();
+    return {
+      publicKey: k.publicKey,
+      privateKeyBase64: k.privateKeyBase64,
+      note: 'Dán privateKeyBase64 vào biến môi trường SIGNING_PRIVATE_KEY trên Vercel rồi Redeploy. publicKey dán vào app/trang web để kiểm tra chữ ký.',
+    };
+  },
+
   async get(db, p) {
     const key = L.normalizeKey(p.key);
     if (!key) throw new ApiError('BAD_REQUEST', 'Key không hợp lệ');
@@ -274,6 +334,31 @@ const actions = {
   },
 };
 
+// Kiểm tra cấu hình (không cần mật khẩu, chỉ trả true/false, không lộ bí mật)
+async function health() {
+  const out = {
+    api: '2.0',
+    node: process.version,
+    adminSecretSet: (process.env.ADMIN_SECRET || '').length >= 16,
+    firebaseConfigured: false,
+    firestoreReachable: false,
+    signingKey: L.signingEnabled(),
+    telegram: !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+  };
+  try {
+    const db = L.getDb();
+    out.firebaseConfigured = true;
+    await Promise.race([
+      db.collection(L.META_COLLECTION).doc('app').get(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+    ]);
+    out.firestoreReachable = true;
+  } catch (e) {
+    out.error = String(e && e.message ? e.message : e).slice(0, 160);
+  }
+  return out;
+}
+
 module.exports = async function handler(req, res) {
   // Không bật CORS cho admin: chỉ trang admin cùng domain gọi được từ trình duyệt
   if (req.method === 'OPTIONS') {
@@ -285,19 +370,47 @@ module.exports = async function handler(req, res) {
     return L.fail(res, 'METHOD_NOT_ALLOWED');
   }
 
+  const action = String((req.query && req.query.action) || '').toLowerCase();
+  if (action === 'health') {
+    try {
+      return L.ok(res, { action, ...(await health()) });
+    } catch (err) {
+      return L.handleError(res, err);
+    }
+  }
+
   const secret = process.env.ADMIN_SECRET || '';
   if (secret.length < 16) {
     return L.fail(res, 'SERVER_ERROR', 'ADMIN_SECRET chưa được cấu hình (cần >= 16 ký tự, đúng tên biến ADMIN_SECRET)');
   }
 
+  // Chặn dò mật khẩu: sai 8 lần trong 10 phút => khoá IP 15 phút
+  let db = null;
+  const ip = L.clientIp(req);
+  try { db = L.getDb(); } catch (e) { db = null; }
+  let hadFails = false;
+  if (db) {
+    try {
+      const rc = await L.rateCheck(db, 'admin', ip);
+      if (rc.locked) {
+        res.setHeader('Retry-After', String(rc.retryAfterSec));
+        return L.fail(res, 'RATE_LIMITED', `Nhập sai quá nhiều lần. Thử lại sau ${Math.ceil(rc.retryAfterSec / 60)} phút.`);
+      }
+      hadFails = rc.fails > 0;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
   const given = providedSecret(req);
   if (!given || !L.safeEqual(given, secret)) {
+    if (db) { try { await L.rateFail(db, 'admin', ip); } catch (e) { console.error(e); } }
     await L.sleep(400); // làm chậm dò mật khẩu
     return L.fail(res, 'UNAUTHORIZED');
   }
+  if (db && hadFails) { try { await L.rateClear(db, 'admin', ip); } catch (e) { /* ignore */ } }
 
   try {
-    const action = String((req.query && req.query.action) || '').toLowerCase();
     if (!Object.prototype.hasOwnProperty.call(actions, action)) {
       return L.fail(res, 'BAD_REQUEST', `Action không tồn tại: ${action.slice(0, 30)}`);
     }
