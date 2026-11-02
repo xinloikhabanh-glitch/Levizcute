@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>License Admin</title>
 <style>
@@ -47,6 +47,13 @@
   .detail td { background: #12151b; }
   #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222733; border: 1px solid #36405a; padding: 9px 14px; border-radius: 8px; max-width: 90vw; z-index: 9; }
   #toast.bad { background: #3d1717; border-color: #6b2a2a; }
+  .tabs { display: flex; gap: 6px; margin: 6px 0; }
+  .tabs button { background: transparent; border-color: #2c3340; color: #9aa3b5; }
+  .tabs button.on { background: #2b5cff; border-color: #2b5cff; color: #fff; }
+  .ok { color: #6fe39b; } .bad { color: #ff8d8d; }
+  #qrBox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 20; }
+  #qrBox .in { background: #171a21; border: 1px solid #36405a; border-radius: 14px; padding: 16px; text-align: center; max-width: 92vw; }
+  #qrBox svg { border-radius: 8px; max-width: 80vw; height: auto; }
 </style>
 </head>
 <body>
@@ -60,11 +67,17 @@
       <button id="btnLogin">Vào</button>
     </div>
     <p class="err" id="loginErr"></p>
+    <label class="row" id="rememberRow" hidden style="margin-top:8px"><input type="checkbox" id="remember" checked> Ghi nhớ mật khẩu trong Keychain (mở app là vào luôn)</label>
+    <div class="bar"><button class="ghost sm" id="btnHealth" type="button">Kiểm tra hệ thống</button></div>
+    <pre class="muted mono" id="healthOut" style="white-space:pre-wrap;margin:6px 0 0"></pre>
   </section>
 
   <div id="app" hidden>
+    <div class="tabs"><button class="on" data-tab="tKeys">Key</button><button data-tab="tEvents">Nhật ký</button><button data-tab="tSys">Hệ thống</button></div>
+    <div id="tKeys">
     <section class="card">
-      <h2>Tạo key</h2>
+      <h2>Tạo key <span class="muted">(số lượng tuỳ ý, tạo theo từng đợt 300)</span></h2>
+      <div class="muted" id="progWrap" hidden><div id="progBar" style="height:8px;border-radius:8px;background:#4d7cff;width:0;transition:width .2s"></div><span id="progTxt"></span></div>
       <div class="grid">
         <label>Gói
           <select id="tier"><option value="basic">Basic</option><option value="premium">Premium</option></select>
@@ -83,10 +96,10 @@
           <input type="number" id="quantity" min="1" max="10000" value="1">
         </label>
         <label>Số key cần tạo
-          <input type="number" id="count" min="1" max="1000" value="1">
+          <input type="number" id="count" min="1" max="1000000" value="1">
         </label>
         <label>Số thiết bị / key
-          <input type="number" id="maxDevices" min="1" max="100" value="1">
+          <input type="number" id="maxDevices" min="1" max="3000" value="1">
         </label>
         <label>Prefix (tuỳ chọn)
           <input type="text" id="prefix" maxlength="10" placeholder="PREM / BASIC">
@@ -94,14 +107,20 @@
         <label>Ghi chú
           <input type="text" id="note" maxlength="200" placeholder="vd: khách A">
         </label>
-        <label class="row"><input type="checkbox" id="deviceLock" checked> Khoá thiết bị (HWID)</label>
+        <label>Mẫu đã lưu<select id="preset"><option value="">— chọn mẫu —</option></select></label>
+        <div class="bar" style="align-self:end"><button type="button" class="ghost sm" id="presetSave">Lưu thành mẫu</button><button type="button" class="ghost sm" id="presetDel">Xoá mẫu</button></div>
+      </div>
+      <div class="grid" style="margin-top:10px">
+        <label class="row"><input type="checkbox" id="deviceLock" checked> Khoá thiết bị (HWID) — bỏ tích = không giới hạn thiết bị</label>
         <button id="btnCreate">Tạo key</button>
+        <button class="ghost" id="btnStop" hidden>Dừng</button>
       </div>
       <div id="createOut" hidden style="margin-top:12px">
         <textarea id="createText" readonly></textarea>
         <div class="bar" style="margin-top:8px">
           <button class="ghost sm" id="btnCopy">Copy</button>
           <button class="ghost sm" id="btnDownload">Tải .txt</button>
+          <button class="ghost sm" id="btnCsv">Tải .csv</button>
           <span class="muted" id="createInfo"></span>
         </div>
       </div>
@@ -118,9 +137,15 @@
           <option value="expired">Hết hạn</option>
           <option value="banned">Bị khoá</option>
         </select>
-        <input class="grow" type="search" id="fSearch" placeholder="Tìm key / ghi chú">
+        <input class="grow" type="search" id="fSearch" placeholder="Tìm key / ghi chú / tên máy / HWID">
         <select id="limit"><option>200</option><option>500</option><option>1000</option></select>
         <button class="ghost" id="btnReload">Tải lại</button>
+        <button class="ghost" id="btnMore" hidden>Tải thêm</button>
+      </div>
+      <div class="bar">
+        <span class="muted" id="statsTxt"></span>
+        <button class="sm ghost" id="purgeExp">Xoá key hết hạn</button>
+        <button class="sm ghost" id="purgeBan">Xoá key bị khoá</button>
       </div>
       <div class="bar" id="bulk" hidden>
         <span id="bulkInfo"></span>
@@ -138,10 +163,168 @@
         </table>
       </div>
     </section>
+    </div>
+    <div id="tEvents" hidden>
+      <section class="card">
+        <h2>Nhật ký hoạt động <span class="muted" id="evSum"></span></h2>
+        <div class="bar"><button class="ghost" id="evReload">Tải lại</button><button class="ghost" id="evMore" hidden>Tải thêm</button></div>
+        <div class="wrap"><table style="min-width:640px"><thead><tr><th>Thời gian</th><th>Sự kiện</th><th>Key</th><th>Máy</th><th>IP</th></tr></thead><tbody id="evBody"></tbody></table></div>
+      </section>
+    </div>
+    <div id="tSys" hidden>
+      <section class="card">
+        <h2>Công tắc khẩn cấp</h2>
+        <div class="grid">
+          <label class="row"><input type="checkbox" id="cfMaint"> Bảo trì (khoá toàn bộ app/web)</label>
+          <label>Thông báo khi bảo trì<input type="text" id="cfMaintMsg" maxlength="200"></label>
+          <label>Phiên bản tối thiểu (vd 1.2.0)<input type="text" id="cfMin" maxlength="20"></label>
+          <label>Phiên bản mới nhất<input type="text" id="cfLatest" maxlength="20"></label>
+          <label>Link cập nhật (https://…)<input type="text" id="cfUrl" maxlength="300"></label>
+          <label>Thông báo cho người dùng<input type="text" id="cfAnn" maxlength="300"></label>
+        </div>
+        <div class="bar" style="margin-top:10px"><button id="cfSave">Lưu</button><span class="muted" id="cfInfo"></span></div>
+      </section>
+      <section class="card">
+        <h2>Kiểm tra hệ thống</h2>
+        <div class="bar"><button class="ghost" id="sysHealth">Kiểm tra</button></div>
+        <pre class="mono" id="sysOut" style="white-space:pre-wrap;margin:6px 0 0"></pre>
+      </section>
+      <section class="card">
+        <h2>Chữ ký chống giả mạo (ES256)</h2>
+        <p class="muted">Tạo cặp khoá, dán <b>privateKeyBase64</b> vào biến SIGNING_PRIVATE_KEY trên Vercel rồi Redeploy. Khoá bí mật chỉ hiện 1 lần, không lưu ở server.</p>
+        <div class="bar"><button class="ghost" id="genKey">Tạo cặp khoá mới</button></div>
+        <textarea id="genOut" readonly hidden></textarea>
+      </section>
+    </div>
   </div>
 </main>
+<div id="qrBox" hidden><div class="in"><div id="qrSvg"></div><div class="mono" id="qrCap" style="margin:8px 0"></div><button class="ghost" id="qrSave">Lưu ảnh</button> <button id="qrClose">Đóng</button></div></div>
 <div id="toast" hidden></div>
 
+<script>
+// Bộ mã hoá QR nhỏ gọn (byte mode, mức sửa lỗi M, version 1-10) — không cần thư viện ngoài
+const TTQR = (() => {
+  'use strict';
+  const ECC_PER_BLOCK = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+  const NUM_BLOCKS = [-1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5];
+  function rawModules(v) {
+    let r = (16 * v + 128) * v + 64;
+    if (v >= 2) { const a = Math.floor(v / 7) + 2; r -= (25 * a - 10) * a - 55; if (v >= 7) r -= 36; }
+    return r;
+  }
+  const dataCw = (v) => Math.floor(rawModules(v) / 8) - ECC_PER_BLOCK[v] * NUM_BLOCKS[v];
+  // GF(256)
+  const EXP = new Array(512), LOG = new Array(256);
+  (() => { let x = 1; for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 256) x ^= 0x11d; } for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255]; })();
+  const gmul = (a, b) => (a && b ? EXP[LOG[a] + LOG[b]] : 0);
+  function rsGen(deg) { let p = [1]; for (let i = 0; i < deg; i++) { const n = new Array(p.length + 1).fill(0); for (let j = 0; j < p.length; j++) { n[j] ^= p[j]; n[j + 1] ^= gmul(p[j], EXP[i]); } p = n; } return p; }
+  function rsRem(data, deg) { const g = rsGen(deg); const r = new Array(deg).fill(0); for (const b of data) { const f = b ^ r.shift(); r.push(0); if (f) for (let i = 0; i < deg; i++) r[i] ^= gmul(g[i + 1], f); } return r; }
+  function utf8(s) { return Array.from(new TextEncoder().encode(s)); }
+  function encode(text) {
+    const bytes = utf8(text);
+    let ver = 0;
+    for (let v = 1; v <= 10; v++) { const cc = v < 10 ? 8 : 16; if (4 + cc + bytes.length * 8 <= dataCw(v) * 8) { ver = v; break; } }
+    if (!ver) throw new Error('Nội dung quá dài cho QR');
+    const bits = [];
+    const put = (val, n) => { for (let i = n - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+    put(4, 4); put(bytes.length, ver < 10 ? 8 : 16); bytes.forEach((b) => put(b, 8));
+    const cap = dataCw(ver) * 8;
+    put(0, Math.min(4, cap - bits.length)); while (bits.length % 8) bits.push(0);
+    for (let pad = 0xec; bits.length < cap; pad ^= 0xec ^ 0x11) put(pad, 8);
+    const data = []; for (let i = 0; i < bits.length; i += 8) { let b = 0; for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j]; data.push(b); }
+    // chia khối + ECC + xen kẽ
+    const nb = NUM_BLOCKS[ver], ecl = ECC_PER_BLOCK[ver], raw = Math.floor(rawModules(ver) / 8);
+    const shortLen = Math.floor(raw / nb) - ecl, numShort = nb - (raw % nb);
+    const blocks = []; let k = 0;
+    for (let i = 0; i < nb; i++) { const len = shortLen + (i < numShort ? 0 : 1); const d = data.slice(k, k + len); k += len; blocks.push({ d, e: rsRem(d, ecl) }); }
+    const out = [];
+    for (let i = 0; i <= shortLen; i++) blocks.forEach((b) => { if (i < b.d.length) out.push(b.d[i]); });
+    for (let i = 0; i < ecl; i++) blocks.forEach((b) => out.push(b.e[i]));
+    return { ver, cw: out };
+  }
+  function build(text) {
+    const { ver, cw } = encode(text);
+    const size = ver * 4 + 17;
+    const M = Array.from({ length: size }, () => new Array(size).fill(false));
+    const F = Array.from({ length: size }, () => new Array(size).fill(false));
+    const set = (x, y, d) => { if (x >= 0 && y >= 0 && x < size && y < size) { M[y][x] = d; F[y][x] = true; } };
+    for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+    const finder = (cx, cy) => { for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const d = Math.max(Math.abs(dx), Math.abs(dy)); set(cx + dx, cy + dy, d !== 2 && d !== 4); } };
+    finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+    const na = ver === 1 ? 0 : Math.floor(ver / 7) + 2;
+    const pos = [];
+    if (na) { const step = Math.ceil((ver * 4 + 4) / (na * 2 - 2)) * 2; pos.push(6); for (let p = size - 7; pos.length < na; p -= step) pos.splice(1, 0, p); }
+    for (let i = 0; i < na; i++) for (let j = 0; j < na; j++) {
+      if ((i === 0 && j === 0) || (i === 0 && j === na - 1) || (i === na - 1 && j === 0)) continue;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) set(pos[i] + dx, pos[j] + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+    }
+    const drawFormat = (mask) => {
+      const data = (0 << 3) | mask; // mức M = 00
+      let rem = data; for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+      const bitsF = ((data << 10) | rem) ^ 0x5412;
+      const g = (i) => ((bitsF >>> i) & 1) !== 0;
+      for (let i = 0; i <= 5; i++) set(8, i, g(i)); set(8, 7, g(6)); set(8, 8, g(7)); set(7, 8, g(8));
+      for (let i = 9; i < 15; i++) set(14 - i, 8, g(i));
+      for (let i = 0; i < 8; i++) set(size - 1 - i, 8, g(i));
+      for (let i = 8; i < 15; i++) set(8, size - 15 + i, g(i));
+      set(8, size - 8, true);
+    };
+    drawFormat(0);
+    if (ver >= 7) {
+      let rem = ver; for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1f25);
+      const bitsV = (ver << 12) | rem;
+      for (let i = 0; i < 18; i++) { const c = ((bitsV >>> i) & 1) !== 0; const a = size - 11 + (i % 3), b = Math.floor(i / 3); set(a, b, c); set(b, a, c); }
+    }
+    // đặt dữ liệu theo zigzag
+    let i = 0;
+    for (let right = size - 1; right >= 1; right -= 2) {
+      if (right === 6) right = 5;
+      for (let v = 0; v < size; v++) for (let j = 0; j < 2; j++) {
+        const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - v : v;
+        if (!F[y][x] && i < cw.length * 8) { M[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) !== 0; i++; }
+      }
+    }
+    const maskFn = [(x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x, y) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+      (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => ((x * y) % 2) + ((x * y) % 3) === 0,
+      (x, y) => (((x * y) % 2) + ((x * y) % 3)) % 2 === 0, (x, y) => (((x + y) % 2) + ((x * y) % 3)) % 2 === 0];
+    const applyMask = (m) => { for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!F[y][x] && maskFn[m](x, y)) M[y][x] = !M[y][x]; };
+    const penalty = () => {
+      let p = 0;
+      for (let pass = 0; pass < 2; pass++) for (let a = 0; a < size; a++) {
+        let run = 1;
+        for (let b = 1; b < size; b++) {
+          const cur = pass ? M[b][a] : M[a][b], prev = pass ? M[b - 1][a] : M[a][b - 1];
+          if (cur === prev) { run++; if (run === 5) p += 3; else if (run > 5) p++; } else run = 1;
+        }
+      }
+      for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) if (M[y][x] === M[y][x + 1] && M[y][x] === M[y + 1][x] && M[y][x] === M[y + 1][x + 1]) p += 3;
+      const pat = [true, false, true, true, true, false, true, false, false, false, false];
+      for (let pass = 0; pass < 2; pass++) for (let a = 0; a < size; a++) for (let b = 0; b + 11 <= size; b++) {
+        for (const rev of [false, true]) {
+          let ok = true;
+          for (let k = 0; k < 11; k++) { const want = rev ? pat[10 - k] : pat[k]; const got = pass ? M[b + k][a] : M[a][b + k]; if (got !== want) { ok = false; break; } }
+          if (ok) p += 40;
+        }
+      }
+      let dark = 0; for (const r of M) for (const c of r) if (c) dark++;
+      p += Math.floor(Math.abs((dark * 20) - size * size * 10) / (size * size)) * 10;
+      return p;
+    };
+    let best = 0, bestP = Infinity;
+    for (let m = 0; m < 8; m++) { applyMask(m); drawFormat(m); const pe = penalty(); if (pe < bestP) { bestP = pe; best = m; } applyMask(m); }
+    applyMask(best); drawFormat(best);
+    return M;
+  }
+  function svg(text, px) {
+    const M = build(text), n = M.length, q = 4; let d = '';
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (M[y][x]) d += `M${x + q} ${y + q}h1v1h-1z`;
+    const tot = n + q * 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${tot} ${tot}" width="${px || 240}" height="${px || 240}" shape-rendering="crispEdges"><rect width="${tot}" height="${tot}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+  }
+  return { build, svg };
+})();
+
+</script>
 <script>
 (() => {
   'use strict';
@@ -181,13 +364,18 @@
   }
 
   async function api(action, body) {
-    const r = await fetch('/api/admin/' + action, {
+    const r = await fetch('/api/admin?action=' + encodeURIComponent(action), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-admin-secret': secret },
       body: JSON.stringify(body || {}),
     });
     let j;
-    try { j = await r.json(); } catch (e) { j = { success: false, message: 'Phản hồi không hợp lệ (' + r.status + ')' }; }
+    try { j = await r.json(); } catch (e) {
+      const hint = r.status === 404
+        ? 'Lỗi 404: server chưa có /api/admin. Kiểm tra repo có file api/admin.js (xoá thư mục api/admin/ cũ nếu có) và Vercel đã Ready, rồi bấm "Kiểm tra hệ thống".'
+        : 'Phản hồi không hợp lệ (' + r.status + ')';
+      j = { success: false, message: hint };
+    }
     if (!j.success) {
       const err = new Error(j.message || j.error || 'Lỗi');
       err.status = r.status;
@@ -218,11 +406,22 @@
   }
 
   // ---------- list ----------
-  async function load() {
-    const j = await api('list', { limit: Number($('#limit').value) || 200 });
-    rows = j.keys;
+  let nextCursor = null;
+  async function load(append) {
+    const body = { limit: Number($('#limit').value) || 200 };
+    if (append && nextCursor) body.after = nextCursor;
+    const j = await api('list', body);
+    rows = append ? rows.concat(j.keys) : j.keys;
+    nextCursor = j.next;
+    $('#btnMore').hidden = !nextCursor;
     for (const k of [...selected]) if (!rows.some((r) => r.key === k)) selected.delete(k);
     render();
+    api('stats').then((x) => {
+      const t = x.stats;
+      $('#statsTxt').textContent = t && t.total != null
+        ? `Tổng ${t.total} · chưa dùng ${t.unused} · hết hạn ${t.expired} · khoá ${t.banned} · basic ${t.basic} · premium ${t.premium}`
+        : '';
+    }).catch(() => {});
   }
 
   function visibleRows() {
@@ -232,7 +431,8 @@
     return rows.filter((r) =>
       (!tier || r.tier === tier) &&
       (!st || r.state === st) &&
-      (!q || r.key.includes(q) || (r.note || '').toUpperCase().includes(q)));
+      (!q || r.key.includes(q) || (r.note || '').toUpperCase().includes(q) ||
+        (r.devices || []).some((d) => String(d.hwid || '').toUpperCase().includes(q) || String(d.name || '').toUpperCase().includes(q))));
   }
 
   function bulkBar() {
@@ -306,6 +506,7 @@
             if (!p) { toast('Sai định dạng. Ví dụ: 7 day, 1 month, 12 hour', true); return; }
             run('extend', { key: r.key, ...p }, 'Đã gia hạn');
           } }, 'Gia hạn'),
+          h('button', { class: 'sm ghost', onclick: () => showQr(r.key) }, 'QR'),
           h('button', { class: 'sm ghost', onclick: () => {
             if (confirm('Gỡ TẤT CẢ thiết bị của key này?')) run('reset-devices', { key: r.key }, 'Đã reset thiết bị');
           } }, 'Reset TB'),
@@ -318,38 +519,63 @@
     bulkBar();
   }
 
-  // ---------- create ----------
+  // ---------- create (tạo theo đợt, số lượng tuỳ ý) ----------
   let lastKeys = [];
+  let stopFlag = false;
+  const CHUNK = 300;
+  const SHOW_MAX = 3000;   // textarea chỉ hiện tối đa ngần này dòng cho nhẹ máy
+  function showKeys(info) {
+    $('#createText').value = lastKeys.slice(-SHOW_MAX).join('\n');
+    $('#createInfo').textContent = info + (lastKeys.length > SHOW_MAX ? ` (ô trên chỉ hiện ${SHOW_MAX} key cuối, hãy tải file để lấy đủ)` : '');
+    $('#createOut').hidden = false;
+  }
   async function create() {
-    const body = {
+    const total = Math.floor(Number($('#count').value));
+    if (!Number.isFinite(total) || total < 1 || total > 1000000) { toast('Số key phải từ 1 đến 1.000.000', true); return; }
+    const base = {
       tier: $('#tier').value,
       duration: $('#duration').value,
       quantity: Number($('#quantity').value),
-      count: Number($('#count').value),
       maxDevices: Number($('#maxDevices').value),
       deviceLock: $('#deviceLock').checked,
       prefix: $('#prefix').value.trim(),
       note: $('#note').value.trim(),
     };
+    if (total > 5000 && !confirm(`Tạo ${total} key? Việc này có thể mất vài phút và tốn lượt ghi Firestore (miễn phí 20.000 lượt/ngày).`)) return;
+    lastKeys = [];
+    stopFlag = false;
     $('#btnCreate').disabled = true;
+    $('#btnStop').hidden = false;
+    $('#progWrap').hidden = false;
     try {
-      const j = await api('create', body);
-      lastKeys = j.keys;
-      $('#createText').value = j.keys.join('\n');
-      $('#createInfo').textContent = `Đã tạo ${j.count} key ${j.tier}`;
-      $('#createOut').hidden = false;
-      toast(`Đã tạo ${j.count} key`);
-      await load();
-    } catch (e) {
-      if (e.data && e.data.created && e.data.created.length) {
-        lastKeys = e.data.created;
-        $('#createText').value = lastKeys.join('\n');
-        $('#createInfo').textContent = `Chỉ tạo được ${lastKeys.length} key (bị gián đoạn)`;
-        $('#createOut').hidden = false;
+      while (lastKeys.length < total && !stopFlag) {
+        const n = Math.min(CHUNK, total - lastKeys.length);
+        let j = null;
+        for (let attempt = 0; ; attempt++) {
+          try { j = await api('create', { ...base, count: n }); break; }
+          catch (e) {
+            const part = (e.data && e.data.created) || [];
+            if (part.length) { lastKeys.push(...part); break; }   // đã ghi được 1 phần: giữ lại, vòng sau tạo tiếp phần còn thiếu
+            if (attempt >= 2 || (e.status && e.status < 500 && e.status !== 429)) throw e;
+            await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          }
+        }
+        if (j) lastKeys.push(...j.keys);
+        const pct = Math.round((lastKeys.length / total) * 100);
+        $('#progBar').style.width = pct + '%';
+        $('#progTxt').textContent = ` ${lastKeys.length}/${total} (${pct}%)`;
+        if (lastKeys.length % 1500 < CHUNK || lastKeys.length >= total) showKeys(`Đã tạo ${lastKeys.length} key ${base.tier}`);
       }
+      showKeys(`Đã tạo ${lastKeys.length} key ${base.tier}${stopFlag ? ' (đã dừng)' : ''}`);
+      toast(`Đã tạo ${lastKeys.length} key`);
+    } catch (e) {
+      if (lastKeys.length) showKeys(`Chỉ tạo được ${lastKeys.length}/${total} key (bị gián đoạn: ${e.message})`);
       toast(e.message, true);
     } finally {
       $('#btnCreate').disabled = false;
+      $('#btnStop').hidden = true;
+      $('#progWrap').hidden = lastKeys.length === 0;
+      try { await load(); } catch (e) { /* ignore */ }
     }
   }
 
@@ -361,6 +587,7 @@
       $('#app').hidden = false;
       $('#btnLogout').hidden = false;
       try { sessionStorage.setItem('adm', secret); } catch (e) { /* ignore */ }
+      if (window.TTNative && $('#remember').checked) window.TTNative.secret.set(secret);
     } catch (e) {
       $('#loginErr').textContent = e.message;
       $('#login').hidden = false;
@@ -373,11 +600,19 @@
   $('#secret').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnLogin').click(); });
   $('#btnLogout').addEventListener('click', () => {
     try { sessionStorage.removeItem('adm'); } catch (e) { /* ignore */ }
-    location.reload();
+    if (window.TTNative) window.TTNative.secret.del();
+    secret = '';
+    rows = [];
+    selected.clear();
+    $('#secret').value = '';
+    $('#app').hidden = true;
+    $('#btnLogout').hidden = true;
+    $('#login').hidden = false;
   });
 
   $('#duration').addEventListener('change', (e) => { $('#quantity').disabled = e.target.value === 'lifetime'; });
   $('#btnCreate').addEventListener('click', create);
+  $('#btnStop').addEventListener('click', () => { stopFlag = true; });
   $('#btnCopy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(lastKeys.join('\n')); toast('Đã copy'); }
     catch (e) { $('#createText').select(); toast('Hãy copy thủ công (Ctrl+C)', true); }
@@ -390,6 +625,28 @@
   });
 
   $('#btnReload').addEventListener('click', () => load().catch((e) => toast(e.message, true)));
+  $('#btnMore').addEventListener('click', () => load(true).catch((e) => toast(e.message, true)));
+  $('#btnCsv').addEventListener('click', () => {
+    const lines = ['key,tier,duration'].concat(lastKeys.map((k) => `${k},${$('#tier').value},${$('#duration').value}`));
+    const a = h('a', { href: URL.createObjectURL(new Blob([lines.join('\n') + '\n'], { type: 'text/csv' })), download: 'keys-' + Date.now() + '.csv' });
+    document.body.append(a); a.click(); a.remove();
+  });
+  async function purge(state, label) {
+    if (!confirm(`Xoá vĩnh viễn TẤT CẢ key ${label}? Không thể hoàn tác.`)) return;
+    let total = 0;
+    try {
+      for (;;) {
+        const j = await api('purge', { state, confirm: true });
+        total += j.deleted;
+        toast(`Đã xoá ${total} key…`);
+        if (j.done) break;
+      }
+      toast(`Đã xoá ${total} key ${label}`);
+    } catch (e) { toast(e.message, true); }
+    await load().catch(() => {});
+  }
+  $('#purgeExp').addEventListener('click', () => purge('expired', 'đã hết hạn'));
+  $('#purgeBan').addEventListener('click', () => purge('banned', 'đang bị khoá'));
   $('#limit').addEventListener('change', () => load().catch((e) => toast(e.message, true)));
   for (const id of ['#fTier', '#fState']) $(id).addEventListener('change', render);
   $('#fSearch').addEventListener('input', render);
@@ -409,6 +666,127 @@
     }
   });
 
+
+  // ---------- QR ----------
+  let qrKey = '';
+  function showQr(key) {
+    qrKey = key;
+    try { $('#qrSvg').innerHTML = TTQR.svg(key, 260); } catch (e) { toast(e.message, true); return; }
+    $('#qrCap').textContent = key;
+    $('#qrBox').hidden = false;
+  }
+  $('#qrClose').addEventListener('click', () => { $('#qrBox').hidden = true; });
+  $('#qrBox').addEventListener('click', (e) => { if (e.target.id === 'qrBox') $('#qrBox').hidden = true; });
+  $('#qrSave').addEventListener('click', () => {
+    const svg = TTQR.svg(qrKey, 600);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas'); c.width = 600; c.height = 600;
+      c.getContext('2d').drawImage(img, 0, 0, 600, 600);
+      c.toBlob((b) => {
+        const a = h('a', { href: URL.createObjectURL(b), download: 'qr-' + qrKey + '.png' });
+        document.body.append(a); a.click(); a.remove();
+      }, 'image/png');
+    };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+
+  // ---------- mẫu tạo key ----------
+  const PRESET_FIELDS = ['tier', 'duration', 'quantity', 'count', 'maxDevices', 'prefix', 'note'];
+  function loadPresets() { try { return JSON.parse(localStorage.getItem('tt_presets') || '{}') || {}; } catch (e) { return {}; } }
+  function savePresets(p) { try { localStorage.setItem('tt_presets', JSON.stringify(p)); } catch (e) { toast('Không lưu được mẫu', true); } }
+  function fillPresetList(sel) {
+    const p = loadPresets(); const el = $('#preset');
+    el.replaceChildren(h('option', { value: '' }, '— chọn mẫu —'), ...Object.keys(p).map((n) => h('option', { value: n }, n)));
+    el.value = sel && p[sel] ? sel : '';
+  }
+  $('#presetSave').addEventListener('click', () => {
+    const name = (prompt('Tên mẫu (vd: Premium 30 ngày):') || '').trim().slice(0, 40);
+    if (!name) return;
+    const p = loadPresets(); const v = { deviceLock: $('#deviceLock').checked };
+    for (const f of PRESET_FIELDS) v[f] = $('#' + f).value;
+    p[name] = v; savePresets(p); fillPresetList(name); toast('Đã lưu mẫu');
+  });
+  $('#presetDel').addEventListener('click', () => {
+    const n = $('#preset').value; if (!n || !confirm('Xoá mẫu "' + n + '"?')) return;
+    const p = loadPresets(); delete p[n]; savePresets(p); fillPresetList('');
+  });
+  $('#preset').addEventListener('change', () => {
+    const v = loadPresets()[$('#preset').value]; if (!v) return;
+    for (const f of PRESET_FIELDS) if (v[f] !== undefined) $('#' + f).value = v[f];
+    $('#deviceLock').checked = v.deviceLock !== false;
+    $('#quantity').disabled = $('#duration').value === 'lifetime';
+  });
+  fillPresetList('');
+
+  // ---------- tab ----------
+  document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    for (const id of ['tKeys', 'tEvents', 'tSys']) $('#' + id).hidden = id !== b.dataset.tab;
+    if (b.dataset.tab === 'tEvents' && !evRows.length) loadEvents(false);
+    if (b.dataset.tab === 'tSys') { loadConfig(); }
+  }));
+
+  // ---------- nhật ký ----------
+  const EV_VI = { activated: '🔑 Kích hoạt lần đầu', new_device: '📱 Thiết bị mới', device_limit: '⚠️ Quá số thiết bị', banned_use: '⛔ Key bị khoá còn dùng' };
+  let evRows = []; let evNext = null;
+  async function loadEvents(append) {
+    try {
+      const j = await api('events', { limit: 100, after: append ? evNext : undefined });
+      evRows = append ? evRows.concat(j.events) : j.events; evNext = j.next;
+      $('#evMore').hidden = !evNext; $('#evSum').textContent = `(${evRows.length})`;
+      $('#evBody').replaceChildren(...evRows.map((e) => h('tr', {}, h('td', {}, fmt(e.createdAt)), h('td', {}, EV_VI[e.type] || e.type),
+        h('td', { class: 'mono' }, e.key || ''), h('td', {}, (e.deviceName || '') + (e.hwid ? ' · ' + String(e.hwid).slice(0, 10) + '…' : '')), h('td', { class: 'mono' }, e.ip || ''))));
+    } catch (e) { toast(e.message, true); }
+  }
+  $('#evReload').addEventListener('click', () => loadEvents(false));
+  $('#evMore').addEventListener('click', () => loadEvents(true));
+
+  // ---------- cấu hình khẩn cấp ----------
+  async function loadConfig() {
+    try {
+      const j = await api('config-get'); const c = j.config || {};
+      $('#cfMaint').checked = !!c.maintenance; $('#cfMaintMsg').value = c.maintenanceMessage || ''; $('#cfMin').value = c.minVersion || '';
+      $('#cfLatest').value = c.latestVersion || ''; $('#cfUrl').value = c.updateUrl || ''; $('#cfAnn').value = c.announcement || '';
+      $('#cfInfo').textContent = j.signing ? 'Chữ ký ES256: đang bật' : 'Chữ ký ES256: chưa bật';
+    } catch (e) { toast(e.message, true); }
+  }
+  $('#cfSave').addEventListener('click', async () => {
+    if ($('#cfMaint').checked && !confirm('BẬT bảo trì sẽ khoá tất cả người dùng ngay. Tiếp tục?')) return;
+    try {
+      await api('config-set', { maintenance: $('#cfMaint').checked, maintenanceMessage: $('#cfMaintMsg').value, minVersion: $('#cfMin').value.trim(),
+        latestVersion: $('#cfLatest').value.trim(), updateUrl: $('#cfUrl').value.trim(), announcement: $('#cfAnn').value });
+      toast('Đã lưu (hiệu lực trong ≤30 giây)');
+    } catch (e) { toast(e.message, true); }
+  });
+  $('#genKey').addEventListener('click', async () => {
+    if (!confirm('Tạo cặp khoá mới? Khoá bí mật chỉ hiện một lần.')) return;
+    try {
+      const j = await api('gen-signing-key');
+      const o = $('#genOut'); o.hidden = false;
+      o.value = 'SIGNING_PRIVATE_KEY (dán vào Vercel):\n' + j.privateKeyBase64 + '\n\nPUBLIC KEY (dán vào app/web):\n' + j.publicKey;
+    } catch (e) { toast(e.message, true); }
+  });
+
+  // ---------- kiểm tra hệ thống ----------
+  async function health(outSel) {
+    const o = $(outSel); o.textContent = 'Đang kiểm tra…';
+    try {
+      const r = await fetch('/api/admin?action=health'); let j = null;
+      try { j = await r.json(); } catch (e) { /* ignore */ }
+      if (!j) { o.textContent = r.status === 404 ? '❌ 404: chưa có /api/admin (thiếu api/admin.js hoặc Vercel chưa deploy xong)' : '❌ Phản hồi lạ (' + r.status + ')'; return; }
+      const row = (ok, t) => (ok ? '✅ ' : '❌ ') + t;
+      o.textContent = [row(true, 'API chạy (Node ' + j.node + ')'), row(j.adminSecretSet, 'ADMIN_SECRET (>=16 ký tự)'), row(j.firebaseConfigured, 'FIREBASE_SERVICE_ACCOUNT'),
+        row(j.firestoreReachable, 'Kết nối Firestore' + (j.error ? ' — ' + j.error : '')), (j.signingKey ? '✅' : '➖') + ' Chữ ký ES256 (tuỳ chọn)', (j.telegram ? '✅' : '➖') + ' Telegram (tuỳ chọn)'].join('\n');
+    } catch (e) { o.textContent = '❌ Không gọi được server: ' + e.message; }
+  }
+  $('#btnHealth').addEventListener('click', () => health('#healthOut'));
+  $('#sysHealth').addEventListener('click', () => health('#sysOut'));
+
+  if (window.TTNative) {
+    $('#rememberRow').hidden = false;
+    if (!secret) window.TTNative.secret.get().then((v) => { if (v) { secret = v; enter(); } });
+  }
   if (secret) enter();
 })();
 </script>
