@@ -574,5 +574,6 @@ module.exports = {
   rateFail,
   rateClear,
   logEvents,
+  notifyTelegram,
   verifyKey,
 };

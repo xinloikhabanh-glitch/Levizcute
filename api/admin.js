@@ -4,7 +4,7 @@ const L = require('./_lib');
 const { ApiError, DURATIONS, TIERS, COLLECTION } = L;
 const admin_FieldPath = () => require('firebase-admin').firestore.FieldPath;
 
-// POST /api/admin?action=<health|create|list|stats|purge|events|config-get|config-set|gen-signing-key|get|ban|unban|delete|reset-devices|extend|update>
+// POST /api/admin?action=<health|create|list|stats|purge|events|config-get|config-set|gen-signing-key|shop-get|shop-set|orders|order-approve|order-reject|get|ban|unban|delete|reset-devices|extend|update>
 // Header: x-admin-secret: <ADMIN_SECRET>
 
 function providedSecret(req) {
@@ -255,6 +255,28 @@ const actions = {
     };
   },
 
+  // ===== Cửa hàng web =====
+  async 'shop-get'(db) {
+    return { shop: await require('./_shop').getShop(db) };
+  },
+  async 'shop-set'(db, p) {
+    return { shop: await require('./_shop').setShop(db, p) };
+  },
+  // status: claimed (chờ duyệt) | pending | approved | rejected | all
+  async orders(db, p) {
+    return require('./_shop').listOrders(db, String(p.status || 'claimed'));
+  },
+  async 'order-approve'(db, p) {
+    const r = await require('./_shop').approveOrder(db, String(p.id || ''));
+    if (r.err) throw new ApiError('BAD_REQUEST', r.err);
+    return { key: r.key };
+  },
+  async 'order-reject'(db, p) {
+    const r = await require('./_shop').rejectOrder(db, String(p.id || ''));
+    if (r.err) throw new ApiError('BAD_REQUEST', r.err);
+    return { rejected: true };
+  },
+
   async get(db, p) {
     const key = L.normalizeKey(p.key);
     if (!key) throw new ApiError('BAD_REQUEST', 'Key không hợp lệ');
@@ -415,9 +437,12 @@ module.exports = async function handler(req, res) {
       return L.fail(res, 'BAD_REQUEST', `Action không tồn tại: ${action.slice(0, 30)}`);
     }
     const params = { ...(req.query || {}), ...L.parseBody(req) };
+    const h = req.headers || {};
+    params.__host = String(h['x-forwarded-host'] || h.host || '').split(',')[0].trim();
     const result = await actions[action](L.getDb(), params);
     return L.ok(res, { action, ...result });
   } catch (err) {
     return L.handleError(res, err);
   }
 };
+module.exports.actions = actions;
