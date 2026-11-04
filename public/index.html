@@ -54,6 +54,10 @@
   #qrBox { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 20; }
   #qrBox .in { background: #171a21; border: 1px solid #36405a; border-radius: 14px; padding: 16px; text-align: center; max-width: 92vw; }
   #qrBox svg { border-radius: 8px; max-width: 80vw; height: auto; }
+  #ordBadge:not(:empty) { margin-left: 6px; background: #ff4d4d; color: #fff; border-radius: 99px; padding: 0 7px; font-size: 12px; }
+  .ordc { border: 1px solid #262b36; border-radius: 10px; padding: 12px; margin-bottom: 10px; background: #12151b; }
+  .ordc .top { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .prow { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; padding: 10px 0; border-bottom: 1px solid #222733; align-items: end; }
 </style>
 </head>
 <body>
@@ -73,7 +77,7 @@
   </section>
 
   <div id="app" hidden>
-    <div class="tabs"><button class="on" data-tab="tKeys">Key</button><button data-tab="tEvents">Nhật ký</button><button data-tab="tSys">Hệ thống</button></div>
+    <div class="tabs"><button class="on" data-tab="tKeys">Key</button><button data-tab="tOrders">Đơn hàng<span id="ordBadge"></span></button><button data-tab="tShop">Cửa hàng</button><button data-tab="tEvents">Nhật ký</button><button data-tab="tSys">Hệ thống</button></div>
     <div id="tKeys">
     <section class="card">
       <h2>Tạo key <span class="muted">(số lượng tuỳ ý, tạo theo từng đợt 300)</span></h2>
@@ -163,6 +167,42 @@
         </table>
       </div>
     </section>
+    </div>
+    <div id="tOrders" hidden>
+      <section class="card">
+        <h2>Đơn hàng <span class="muted" id="ordSum"></span></h2>
+        <div class="bar">
+          <select id="ordFilter"><option value="claimed">Chờ duyệt (khách đã báo CK)</option><option value="pending">Chưa chuyển khoản</option><option value="approved">Đã giao key</option><option value="rejected">Đã từ chối</option><option value="all">Tất cả</option></select>
+          <button class="ghost" id="ordReload">Tải lại</button>
+        </div>
+        <p class="muted" style="margin:0 0 10px">Kiểm tra tiền đã vào tài khoản (đúng số tiền + nội dung = mã đơn) rồi mới bấm Duyệt. Key được tạo và hiện ngay cho khách trên trang mua.</p>
+        <div id="ordList"></div>
+      </section>
+    </div>
+    <div id="tShop" hidden>
+      <section class="card">
+        <h2>Thông tin cửa hàng</h2>
+        <div class="grid">
+          <label>Tên cửa hàng<input type="text" id="shName" maxlength="40"></label>
+          <label>Liên hệ hỗ trợ (Zalo / Telegram)<input type="text" id="shContact" maxlength="120"></label>
+          <label>Thông báo trên trang mua<input type="text" id="shNotice" maxlength="200"></label>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Tài khoản nhận tiền</h2>
+        <label class="row" style="margin-bottom:10px"><input type="checkbox" id="shCustomQr"> Dùng ảnh QR riêng của tôi (file <b>qr.jpg</b> upload cạnh shop.html) — khách tự nhập số tiền</label>
+        <p class="muted" style="margin:0 0 10px">Để trống phần ngân hàng bên dưới nếu chỉ dùng ảnh QR riêng. Điền đủ thì web hiển thị thêm số tài khoản; nếu KHÔNG bật ảnh riêng, web tự tạo mã VietQR có sẵn số tiền + nội dung.</p>
+        <div class="grid">
+          <label>Mã ngân hàng (MB, VCB, TCB, ACB, VPB, BIDV, TPB…)<input type="text" id="bkId" maxlength="12"></label>
+          <label>Số tài khoản<input type="text" id="bkAcc" inputmode="numeric" maxlength="20"></label>
+          <label>Chủ tài khoản (không dấu)<input type="text" id="bkName" maxlength="60"></label>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Sản phẩm</h2>
+        <div id="prodList"></div>
+        <div class="bar" style="margin-top:10px"><button class="ghost" id="prodAdd">+ Thêm sản phẩm</button><button id="shopSave">Lưu cửa hàng</button><a class="link" id="shopLink" target="_blank" rel="noopener">Mở trang mua ↗</a></div>
+      </section>
     </div>
     <div id="tEvents" hidden>
       <section class="card">
@@ -588,6 +628,7 @@ const TTQR = (() => {
       $('#btnLogout').hidden = false;
       try { sessionStorage.setItem('adm', secret); } catch (e) { /* ignore */ }
       if (window.TTNative && $('#remember').checked) window.TTNative.secret.set(secret);
+      startOrdPoll();
     } catch (e) {
       $('#loginErr').textContent = e.message;
       $('#login').hidden = false;
@@ -601,6 +642,7 @@ const TTQR = (() => {
   $('#btnLogout').addEventListener('click', () => {
     try { sessionStorage.removeItem('adm'); } catch (e) { /* ignore */ }
     if (window.TTNative) window.TTNative.secret.del();
+    clearInterval(ordTimer); $('#ordBadge').textContent = ''; ordLast = 0;
     secret = '';
     rows = [];
     selected.clear();
@@ -722,13 +764,15 @@ const TTQR = (() => {
   // ---------- tab ----------
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => {
     document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b));
-    for (const id of ['tKeys', 'tEvents', 'tSys']) $('#' + id).hidden = id !== b.dataset.tab;
+    for (const id of ['tKeys', 'tOrders', 'tShop', 'tEvents', 'tSys']) $('#' + id).hidden = id !== b.dataset.tab;
     if (b.dataset.tab === 'tEvents' && !evRows.length) loadEvents(false);
+    if (b.dataset.tab === 'tOrders') loadOrders();
+    if (b.dataset.tab === 'tShop') loadShop();
     if (b.dataset.tab === 'tSys') { loadConfig(); }
   }));
 
   // ---------- nhật ký ----------
-  const EV_VI = { activated: '🔑 Kích hoạt lần đầu', new_device: '📱 Thiết bị mới', device_limit: '⚠️ Quá số thiết bị', banned_use: '⛔ Key bị khoá còn dùng' };
+  const EV_VI = { activated: '🔑 Kích hoạt lần đầu', new_device: '📱 Thiết bị mới', device_limit: '⚠️ Quá số thiết bị', banned_use: '⛔ Key bị khoá còn dùng', self_remove: '🗑 Khách tự gỡ thiết bị' };
   let evRows = []; let evNext = null;
   async function loadEvents(append) {
     try {
@@ -765,6 +809,87 @@ const TTQR = (() => {
       const j = await api('gen-signing-key');
       const o = $('#genOut'); o.hidden = false;
       o.value = 'SIGNING_PRIVATE_KEY (dán vào Vercel):\n' + j.privateKeyBase64 + '\n\nPUBLIC KEY (dán vào app/web):\n' + j.publicKey;
+    } catch (e) { toast(e.message, true); }
+  });
+
+
+  // ---------- đơn hàng ----------
+  const ORD_VI = { pending: 'Chưa chuyển khoản', claimed: 'Chờ duyệt', approving: 'Đang xử lý', approved: 'Đã giao key', rejected: 'Đã từ chối', cancelled: 'Đã huỷ' };
+  let ordLast = 0, ordTimer = null;
+  async function loadOrders() {
+    try {
+      const j = await api('orders', { status: $('#ordFilter').value });
+      $('#ordSum').textContent = `(${j.count})`;
+      const box = $('#ordList'); box.replaceChildren();
+      if (!j.orders.length) box.append(h('p', { class: 'muted' }, 'Không có đơn.'));
+      for (const o of j.orders) {
+        const act = [];
+        if (o.status === 'claimed' || o.status === 'pending') {
+          act.push(h('button', { class: 'sm', onclick: async () => {
+            if (!confirm(`Đã thấy ${Number(o.amount).toLocaleString('vi-VN')}đ với nội dung ${o.id} trong tài khoản? Duyệt sẽ tạo key và gửi cho khách.`)) return;
+            try { const r = await api('order-approve', { id: o.id }); toast('Đã duyệt. Key: ' + r.key); } catch (e) { toast(e.message, true); }
+            loadOrders(); pollOrders();
+          } }, 'Duyệt & tạo key'));
+          act.push(h('button', { class: 'sm danger', onclick: async () => {
+            if (!confirm('Từ chối đơn ' + o.id + '?')) return;
+            try { await api('order-reject', { id: o.id }); toast('Đã từ chối'); } catch (e) { toast(e.message, true); }
+            loadOrders(); pollOrders();
+          } }, 'Từ chối'));
+        }
+        if (o.key) act.push(h('button', { class: 'sm ghost', onclick: () => showQr(o.key) }, 'QR key'));
+        box.append(h('div', { class: 'ordc' },
+          h('div', { class: 'top' }, h('b', { class: 'mono' }, o.id), h('span', { class: 'badge b-' + (o.status === 'approved' ? 'active' : o.status === 'claimed' ? 'unused' : o.status === 'pending' ? 'expired' : 'banned') }, ORD_VI[o.status] || o.status)),
+          h('div', {}, `${o.product.name} · `, h('b', {}, Number(o.amount).toLocaleString('vi-VN') + 'đ')),
+          h('div', { class: 'muted' }, `Liên hệ: ${o.contact} · ${fmt(o.createdAt)}`),
+          o.key ? h('div', { class: 'mono' }, o.key) : null,
+          h('div', { class: 'actions', style: 'margin-top:8px' }, act)));
+      }
+    } catch (e) { toast(e.message, true); }
+  }
+  $('#ordFilter').addEventListener('change', loadOrders);
+  $('#ordReload').addEventListener('click', loadOrders);
+  async function pollOrders() {
+    try {
+      const j = await api('orders', { status: 'claimed' });
+      $('#ordBadge').textContent = j.count ? String(j.count) : '';
+      if (j.count > ordLast) toast(`🔔 Có ${j.count} đơn chờ duyệt`);
+      ordLast = j.count;
+    } catch (e) { /* bỏ qua */ }
+  }
+  function startOrdPoll() { clearInterval(ordTimer); pollOrders(); ordTimer = setInterval(() => { if (!document.hidden) pollOrders(); }, 30000); }
+
+  // ---------- cửa hàng ----------
+  let prods = [];
+  const DUR_OPT = [['hour', 'Giờ'], ['day', 'Ngày'], ['week', 'Tuần'], ['month', 'Tháng'], ['year', 'Năm'], ['lifetime', 'Vĩnh viễn']];
+  function renderProds() {
+    const box = $('#prodList'); box.replaceChildren();
+    if (!prods.length) box.append(h('p', { class: 'muted' }, 'Chưa có sản phẩm. Bấm "+ Thêm sản phẩm".'));
+    prods.forEach((p, i) => {
+      const f = (label, key, attrs) => h('label', {}, label, h('input', { ...attrs, value: p[key] == null ? '' : p[key], oninput: (e) => { p[key] = e.target.value; } }));
+      box.append(h('div', { class: 'prow' },
+        f('Mã (id)', 'id', { type: 'text', maxlength: 20 }), f('Tên hiển thị', 'name', { type: 'text', maxlength: 50 }), f('Mô tả ngắn', 'desc', { type: 'text', maxlength: 120 }),
+        h('label', {}, 'Gói', h('select', { onchange: (e) => { p.tier = e.target.value; } }, ...['basic', 'premium'].map((v) => h('option', { value: v, selected: p.tier === v }, v)))),
+        h('label', {}, 'Thời hạn', h('select', { onchange: (e) => { p.duration = e.target.value; } }, ...DUR_OPT.map(([v, l]) => h('option', { value: v, selected: p.duration === v }, l)))),
+        f('Số lượng', 'quantity', { type: 'number', min: 1 }), f('Số máy', 'maxDevices', { type: 'number', min: 1 }), f('Giá (VND)', 'price', { type: 'number', min: 1000 }),
+        h('button', { class: 'sm danger', onclick: () => { prods.splice(i, 1); renderProds(); } }, 'Xoá')));
+    });
+  }
+  async function loadShop() {
+    $('#shopLink').href = '/shop.html';
+    try {
+      const s = (await api('shop-get')).shop;
+      $('#shName').value = s.name || ''; $('#shContact').value = s.contact || ''; $('#shNotice').value = s.notice || '';
+      $('#bkId').value = s.bank ? s.bank.bankId : ''; $('#bkAcc').value = s.bank ? s.bank.account : ''; $('#bkName').value = s.bank ? s.bank.name : ''; $('#shCustomQr').checked = !!s.customQr;
+      prods = (s.products || []).map((p) => ({ ...p })); renderProds();
+    } catch (e) { toast(e.message, true); }
+  }
+  $('#prodAdd').addEventListener('click', () => { prods.push({ id: 'goi' + (prods.length + 1), name: '', desc: '', tier: 'basic', duration: 'month', quantity: 1, maxDevices: 1, price: 50000 }); renderProds(); });
+  $('#shopSave').addEventListener('click', async () => {
+    const bank = $('#bkId').value.trim() ? { bankId: $('#bkId').value.trim(), account: $('#bkAcc').value.trim(), name: $('#bkName').value.trim() } : null;
+    try {
+      await api('shop-set', { customQr: $('#shCustomQr').checked, name: $('#shName').value, contact: $('#shContact').value, notice: $('#shNotice').value, bank,
+        products: prods.map((p) => ({ ...p, quantity: Number(p.quantity), maxDevices: Number(p.maxDevices), price: Number(p.price) })) });
+      toast('Đã lưu cửa hàng'); loadShop();
     } catch (e) { toast(e.message, true); }
   });
 
